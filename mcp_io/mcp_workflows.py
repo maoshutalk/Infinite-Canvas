@@ -139,3 +139,37 @@ def import_workflow(workflows_dir: Path, name: str) -> Dict[str, Any]:
         "converted": converted_flag,
         "node_count": node_count,
     }
+
+
+def import_workflows(workflows_dir: Path, names: list) -> Dict[str, Any]:
+    """Import multiple workflows. Returns {results: [...], imported: int, failed: int}.
+
+    Each result is {name, ok, stored?, format?, converted?, node_count?, error?}.
+    Errors from individual files do not abort the batch — every name gets a result.
+    """
+    results: List[Dict[str, Any]] = []
+    imported = 0
+    failed = 0
+    for name in names:
+        if not isinstance(name, str) or not name:
+            results.append({"name": str(name), "ok": False, "error": "invalid name"})
+            failed += 1
+            continue
+        try:
+            r = import_workflow(workflows_dir, name)
+            results.append({
+                "name": name,
+                "ok": True,
+                "stored": r["name"],
+                "format": r["format"],
+                "converted": r["converted"],
+                "node_count": r["node_count"],
+            })
+            imported += 1
+        except FileNotFoundError as exc:
+            results.append({"name": name, "ok": False, "error": str(exc)})
+            failed += 1
+        except (ValueError, OSError) as exc:
+            results.append({"name": name, "ok": False, "error": str(exc)})
+            failed += 1
+    return {"results": results, "imported": imported, "failed": failed}

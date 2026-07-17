@@ -360,6 +360,55 @@ class ImportWorkflowTests(unittest.TestCase):
             finally:
                 mw.WORKFLOW_DIR = orig
 
+    def test_batch_imports_multiple_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mcp_src"
+            src.mkdir()
+            self._write(src, "alpha-ui.json", SAMPLE_UI)
+            self._write(src, "beta.json", SAMPLE_API)
+
+            wf_dir = self._setup_workflow_dir(tmp)
+            import mcp_io.mcp_workflows as mw
+            orig = mw.WORKFLOW_DIR
+            mw.WORKFLOW_DIR = wf_dir
+            try:
+                from mcp_io.mcp_workflows import import_workflows
+                result = import_workflows(src, ["alpha-ui.json", "beta.json"])
+            finally:
+                mw.WORKFLOW_DIR = orig
+
+            self.assertEqual(result["imported"], 2)
+            self.assertEqual(result["failed"], 0)
+            self.assertEqual(len(result["results"]), 2)
+            self.assertTrue(all(r["ok"] for r in result["results"]))
+            self.assertEqual(
+                sorted(r["stored"] for r in result["results"]),
+                ["custom/alpha.json", "custom/beta.json"],
+            )
+
+    def test_batch_continues_on_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mcp_src"
+            src.mkdir()
+            self._write(src, "good.json", SAMPLE_API)
+
+            wf_dir = self._setup_workflow_dir(tmp)
+            import mcp_io.mcp_workflows as mw
+            orig = mw.WORKFLOW_DIR
+            mw.WORKFLOW_DIR = wf_dir
+            try:
+                from mcp_io.mcp_workflows import import_workflows
+                result = import_workflows(src, ["good.json", "ghost.json"])
+            finally:
+                mw.WORKFLOW_DIR = orig
+
+            self.assertEqual(result["imported"], 1)
+            self.assertEqual(result["failed"], 1)
+            self.assertEqual(result["results"][0]["name"], "good.json")
+            self.assertTrue(result["results"][0]["ok"])
+            self.assertEqual(result["results"][1]["name"], "ghost.json")
+            self.assertFalse(result["results"][1]["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()
