@@ -206,5 +206,160 @@ class MatchInstanceTests(unittest.TestCase):
         self.assertIsNone(match_instance("http://127.0.0.1:8188", ["192.168.40.12:8188"]))
 
 
+# =====================================================================
+# Task 3 — mcp_workflows
+# =====================================================================
+
+from mcp_io.mcp_workflows import import_workflow, list_workflows
+
+
+class ListWorkflowsTests(unittest.TestCase):
+    def _write(self, d: Path, name: str, content: dict):
+        (d / name).write_text(json.dumps(content))
+
+    def test_lists_ui_and_api_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, "alpha-ui.json", SAMPLE_UI)
+            self._write(d, "beta.json", SAMPLE_API)
+            self._write(d, "build.py", {"not": "workflow"})  # must be ignored
+            result = list_workflows(d)
+            names = [w["name"] for w in result["workflows"]]
+            self.assertIn("alpha-ui.json", names)
+            self.assertIn("beta.json", names)
+            self.assertNotIn("build.py", names)
+            self.assertEqual(result["state"], "ok")
+
+    def test_format_detection_in_listing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, "alpha-ui.json", SAMPLE_UI)
+            self._write(d, "beta.json", SAMPLE_API)
+            result = list_workflows(d)
+            by_name = {w["name"]: w for w in result["workflows"]}
+            self.assertEqual(by_name["alpha-ui.json"]["format"], "ui")
+            self.assertEqual(by_name["beta.json"]["format"], "api")
+
+    def test_title_strips_suffix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, "My-Workflow-ui.json", SAMPLE_UI)
+            result = list_workflows(d)
+            self.assertEqual(result["workflows"][0]["title"], "My-Workflow")
+
+    def test_corrupt_file_in_listing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, "good.json", SAMPLE_API)
+            (d / "bad.json").write_text("not json {{{")
+            result = list_workflows(d)
+            items = {w["name"]: w for w in result["workflows"]}
+            self.assertIn("good.json", items)
+            self.assertIn("bad.json", items)
+            self.assertIn("error", items["bad.json"])
+
+    def test_no_recursion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            sub = d / "archived"
+            sub.mkdir()
+            self._write(sub, "hidden.json", SAMPLE_API)
+            result = list_workflows(d)
+            names = [w["name"] for w in result["workflows"]]
+            self.assertEqual(names, [])
+
+    def test_missing_dir(self):
+        result = list_workflows(Path("/no/such/dir"))
+        self.assertEqual(result["workflows"], [])
+        self.assertEqual(result["state"], "dir_missing")
+
+
+class ImportWorkflowTests(unittest.TestCase):
+    def _write(self, d: Path, name: str, content: dict):
+        (d / name).write_text(json.dumps(content))
+
+    def _setup_workflow_dir(self, tmp):
+        wf_dir = Path(tmp) / "workflows"
+        (wf_dir / "custom").mkdir(parents=True)
+        return wf_dir
+
+    def test_import_ui_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mcp_src"
+            src.mkdir()
+            self._write(src, "alpha-ui.json", SAMPLE_UI)
+
+            wf_dir = self._setup_workflow_dir(tmp)
+            import mcp_io.mcp_workflows as mw
+            orig = mw.WORKFLOW_DIR
+            mw.WORKFLOW_DIR = wf_dir
+            try:
+                result = import_workflow(src, "alpha-ui.json")
+            finally:
+                mw.WORKFLOW_DIR = orig
+
+            self.assertEqual(result["format"], "ui")
+            self.assertTrue(result["converted"])
+            stored = wf_dir / result["name"]
+            self.assertTrue(stored.exists())
+            written = json.loads(stored.read_text())
+            self.assertIn("1", written)
+            self.assertEqual(written["1"]["class_type"], "CLIPTextEncode")
+
+    def test_import_api_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mcp_src"
+            src.mkdir()
+            self._write(src, "beta.json", SAMPLE_API)
+
+            wf_dir = self._setup_workflow_dir(tmp)
+            import mcp_io.mcp_workflows as mw
+            orig = mw.WORKFLOW_DIR
+            mw.WORKFLOW_DIR = wf_dir
+            try:
+                result = import_workflow(src, "beta.json")
+            finally:
+                mw.WORKFLOW_DIR = orig
+
+            self.assertEqual(result["format"], "api")
+            self.assertFalse(result["converted"])
+            stored = wf_dir / result["name"]
+            self.assertTrue(stored.exists())
+
+    def test_collision_appends_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mcp_src"
+            src.mkdir()
+            self._write(src, "alpha-ui.json", SAMPLE_UI)
+
+            wf_dir = self._setup_workflow_dir(tmp)
+            (wf_dir / "custom" / "alpha.json").write_text("{}")  # collision
+
+            import mcp_io.mcp_workflows as mw
+            orig = mw.WORKFLOW_DIR
+            mw.WORKFLOW_DIR = wf_dir
+            try:
+                result = import_workflow(src, "alpha-ui.json")
+            finally:
+                mw.WORKFLOW_DIR = orig
+
+            self.assertNotEqual(result["name"], "custom/alpha.json")
+            self.assertTrue(result["name"].startswith("custom/alpha_"))
+            self.assertTrue(result["name"].endswith(".json"))
+
+    def test_missing_file_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mcp_src"
+            src.mkdir()
+            import mcp_io.mcp_workflows as mw
+            orig = mw.WORKFLOW_DIR
+            mw.WORKFLOW_DIR = Path(tmp) / "wf"
+            try:
+                with self.assertRaises(FileNotFoundError):
+                    import_workflow(src, "ghost.json")
+            finally:
+                mw.WORKFLOW_DIR = orig
+
+
 if __name__ == "__main__":
     unittest.main()
