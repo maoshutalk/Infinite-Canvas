@@ -32,6 +32,7 @@ from threading import Lock, Thread
 import httpx
 from PIL import Image, ImageOps
 from io import BytesIO
+from mcp_io import mcp_config, mcp_workflows
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
@@ -17401,6 +17402,101 @@ def save_comfyui_instances(payload: ComfyInstancesPayload):
             new_load[addr] = n
     BACKEND_LOCAL_LOAD = new_load
     return {"instances": COMFYUI_INSTANCES}
+
+# --- ComfyUI MCP 工作流源 ---
+
+@app.get("/api/mcp/status")
+def get_mcp_status(probe: bool = False):
+    """Return MCP server discovery + connection status.
+
+    When probe=True and a configured instance matches the MCP's comfyui.url,
+    also issue GET <addr>/system_stats with 5s timeout to verify ComfyUI liveness.
+    """
+    cfg = mcp_config.load_config(mcp_config.resolve_config_path())
+    matched = None
+    probe_ok = None
+
+    if cfg.exists and cfg.comfyui_url:
+        matched = mcp_config.match_instance(cfg.comfyui_url, COMFYUI_INSTANCES)
+
+        if probe and matched:
+            try:
+                with urllib.request.urlopen(
+                    f"http://{matched}/system_stats", timeout=5
+                ) as resp:
+                    probe_ok = 200 <= resp.status < 300
+            except Exception:
+                probe_ok = False
+
+    if not cfg.exists:
+        state = "not_configured"
+    elif cfg.workflows_dir is None or not cfg.workflows_dir.exists():
+        state = "dir_missing"
+    elif matched:
+        state = "connected"
+    else:
+        state = "mismatch"
+
+    workflows_dir_path = cfg.workflows_dir
+    file_count = 0
+    if state == "connected" and workflows_dir_path and workflows_dir_path.is_dir():
+        try:
+            file_count = sum(
+                1 for p in workflows_dir_path.iterdir()
+                if p.is_file() and p.suffix.lower() == ".json"
+            )
+        except OSError:
+            file_count = 0
+
+    return {
+        "available": cfg.exists,
+        "config_path": str(cfg.path),
+        "workflows_dir": str(workflows_dir_path) if workflows_dir_path else None,
+        "comfyui_url": cfg.comfyui_url,
+        "matched_instance": matched,
+        "file_count": file_count,
+        "state": state,
+        "probe_ok": probe_ok,
+        "error": cfg.error,
+    }
+
+
+@app.get("/api/mcp/workflows")
+def get_mcp_workflows():
+    """List workflow files from MCP's workflowsDir."""
+    cfg = mcp_config.load_config(mcp_config.resolve_config_path())
+    if not cfg.exists:
+        return {
+            "workflows": [],
+            "workflows_dir": None,
+            "state": "not_configured",
+        }
+    return mcp_workflows.list_workflows(cfg.workflows_dir)
+
+
+@app.post("/api/mcp/workflows/{name:path}/import")
+def import_mcp_workflow(name: str):
+    """Read a workflow from MCP's workflowsDir, convert UI->API if needed,
+    write to workflows/custom/<stem>.<json>[_<timestamp>.json].
+    """
+    safe_name = os.path.basename(name)
+    if not WORKFLOW_NAME_RE.match(safe_name):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid workflow name: {name}",
+        )
+    cfg = mcp_config.load_config(mcp_config.resolve_config_path())
+    if not cfg.exists or cfg.workflows_dir is None:
+        raise HTTPException(status_code=404, detail="MCP not configured")
+    try:
+        result = mcp_workflows.import_workflow(cfg.workflows_dir, safe_name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Conversion failed: {exc}") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Filesystem error: {exc}") from exc
+    return result
 
 @app.get("/api/workflows")
 def list_workflows():
