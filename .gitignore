@@ -9,6 +9,7 @@ assets/output/
 assets/input/
 history.json
 __pycache__/
+node_modules/
 
 
 ._!
