@@ -273,6 +273,18 @@ class ListWorkflowsTests(unittest.TestCase):
         self.assertEqual(result["workflows"], [])
         self.assertEqual(result["state"], "dir_missing")
 
+    def test_filters_macos_metadata_files(self):
+        """Files starting with `._` (AppleDouble metadata) must be filtered out."""
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, "real-ui.json", SAMPLE_UI)
+            # macOS AppleDouble metadata: a fake `._name.json` next to real files.
+            (d / "._real-ui.json").write_bytes(b"\x00\x05\x16\x07binary stuff")
+            (d / "._!spurious.json").write_bytes(b"\x00\x05\x16\x07binary")
+            result = list_workflows(d)
+            names = [w["name"] for w in result["workflows"]]
+            self.assertEqual(names, ["real-ui.json"])
+
 
 class ImportWorkflowTests(unittest.TestCase):
     def _write(self, d: Path, name: str, content: dict):
@@ -385,6 +397,30 @@ class ImportWorkflowTests(unittest.TestCase):
                 sorted(r["stored"] for r in result["results"]),
                 ["custom/alpha.json", "custom/beta.json"],
             )
+
+    def test_batch_skips_mac_metadata(self):
+        """import_workflows must filter out `._*-prefixed filenames."""
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mcp_src"
+            src.mkdir()
+            self._write(src, "alpha-ui.json", SAMPLE_UI)
+            (src / "._alpha-ui.json").write_bytes(b"\x00\x05\x16\x07binary")
+
+            wf_dir = self._setup_workflow_dir(tmp)
+            import mcp_io.mcp_workflows as mw
+            orig = mw.WORKFLOW_DIR
+            mw.WORKFLOW_DIR = wf_dir
+            try:
+                from mcp_io.mcp_workflows import import_workflows
+                result = import_workflows(src, ["alpha-ui.json", "._alpha-ui.json"])
+            finally:
+                mw.WORKFLOW_DIR = orig
+
+            self.assertEqual(result["imported"], 1)
+            self.assertEqual(result["failed"], 1)
+            errors = [r for r in result["results"] if not r["ok"]]
+            self.assertEqual(len(errors), 1)
+            # The filtered name returns a clear "mac metadata" error in the result row.
 
     def test_batch_continues_on_error(self):
         with tempfile.TemporaryDirectory() as tmp:

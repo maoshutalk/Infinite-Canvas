@@ -58,7 +58,15 @@
                         </div>
                         <div id="mcpStatusBadge" class="mcp-status-badge mcp-state-loading">检测中…</div>
                         <div id="mcpStatusHint" class="mcp-status-hint"></div>
+                        <div id="mcpSelectAllRow" class="mcp-select-all-row is-hidden">
+                            <span id="mcpSelectAllToggle" class="mcp-row-check" tabindex="0" role="checkbox" aria-checked="false" aria-label="全选" onclick="toggleMcpSelectAll()" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleMcpSelectAll();}"></span>
+                            <span class="mcp-select-all-label" onclick="toggleMcpSelectAll()">全选</span>
+                            <span id="mcpSelectCount" class="mcp-select-count">0</span>
+                        </div>
                         <div id="mcpWorkflowList" class="workflow-list mcp-workflow-list"></div>
+                        <button id="mcpBatchImportBtn" class="upload-btn mcp-batch-btn" type="button" onclick="importMcpWorkflows()" aria-label="批量导入选中工作流">
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i><span id="mcpBatchBtnLabel">导入选中 (0)</span>
+                        </button>
                     </div>
 
                     <div class="side-card workflow-panel workflow-panel-comfy">

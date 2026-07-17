@@ -17443,7 +17443,9 @@ def get_mcp_status(probe: bool = False):
         try:
             file_count = sum(
                 1 for p in workflows_dir_path.iterdir()
-                if p.is_file() and p.suffix.lower() == ".json"
+                if p.is_file()
+                and p.suffix.lower() == ".json"
+                and not p.name.startswith("._")
             )
         except OSError:
             file_count = 0
@@ -17480,6 +17482,9 @@ def import_mcp_workflow(name: str):
     write to workflows/custom/<stem>.<json>[_<timestamp>.json].
     """
     safe_name = os.path.basename(name)
+    # Block macOS AppleDouble metadata files (._Foo.json) before regex check.
+    if safe_name.startswith("._"):
+        raise HTTPException(status_code=400, detail="Mac metadata files cannot be imported")
     if not WORKFLOW_NAME_RE.match(safe_name):
         raise HTTPException(
             status_code=400,
@@ -17498,6 +17503,36 @@ def import_mcp_workflow(name: str):
         raise HTTPException(status_code=500, detail=f"Filesystem error: {exc}") from exc
     return result
 
+
+class McpBatchImportRequest(BaseModel):
+    names: List[str] = Field(..., min_length=1, max_length=200)
+
+
+@app.post("/api/mcp/workflows/import-batch")
+def import_mcp_workflows_batch(payload: McpBatchImportRequest):
+    """Read multiple workflows from MCP's workflowsDir in one call.
+
+    Each name is processed independently — failures do not abort the batch.
+    Returns {results: [{name, ok, stored?, format?, converted?, node_count?, error?}],
+             imported: int, failed: int}.
+    """
+    cfg = mcp_config.load_config(mcp_config.resolve_config_path())
+    if not cfg.exists or cfg.workflows_dir is None:
+        raise HTTPException(status_code=404, detail="MCP not configured")
+    safe_names: List[str] = []
+    for raw in payload.names:
+        if not isinstance(raw, str):
+            continue
+        cleaned = os.path.basename(raw)
+        if not WORKFLOW_NAME_RE.match(cleaned):
+            continue
+        # Skip macOS AppleDouble metadata files (._Foo.json) at the import boundary.
+        if cleaned.startswith("._"):
+            continue
+        safe_names.append(cleaned)
+    return mcp_workflows.import_workflows(cfg.workflows_dir, safe_names)
+
+
 @app.get("/api/workflows")
 def list_workflows():
     if not os.path.isdir(WORKFLOW_DIR):
@@ -17508,6 +17543,9 @@ def list_workflows():
             dirs[:] = [d for d in dirs if d in {CUSTOM_WORKFLOW_FOLDER, LEGACY_CUSTOM_WORKFLOW_FOLDER}]
         for fn in sorted(files):
             if not fn.endswith(".json") or fn.endswith(".config.json"):
+                continue
+            # Skip macOS AppleDouble metadata files (._Foo.json) created by Finder.
+            if fn.startswith("._"):
                 continue
             rel = os.path.relpath(os.path.join(root, fn), WORKFLOW_DIR).replace("\\", "/")
             if is_builtin_workflow(rel):

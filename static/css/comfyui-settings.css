@@ -237,4 +237,53 @@ body.studio-theme-dark .pfield-bool-track:not(.on) .pfield-bool-thumb { backgrou
 .mini-port.in { left:-5px; }
 .mini-port.out { right:-5px; }
 .mini-run { margin-top:10px; }
+/* ===== ComfyUI MCP 源 card ===== */
+.side-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.side-title-row .side-title { padding:0; }
+.mcp-status-badge { font-size:10.5px; font-weight:800; letter-spacing:.04em; padding:4px 10px; border-radius:6px; width:fit-content; background:var(--soft); color:var(--muted); line-height:1.3; }
+.mcp-state-loading { color:var(--muted); }
+.mcp-state-connected { color:#15803d; background:rgba(34,197,94,.13); }
+body.studio-theme-dark .mcp-state-connected { color:#86efac; background:rgba(34,197,94,.2); }
+.mcp-state-mismatch { color:#b45309; background:rgba(245,158,11,.16); }
+body.studio-theme-dark .mcp-state-mismatch { color:#fbbf24; background:rgba(245,158,11,.22); }
+.mcp-state-unset { color:var(--faint); }
+.mcp-status-hint { font-size:10px; font-weight:600; color:var(--faint); line-height:1.45; min-height:14px; word-break:break-all; }
+.mcp-select-all-row { display:flex; align-items:center; gap:8px; padding:6px 2px 4px; font-size:10.5px; color:var(--muted); font-weight:700; user-select:none; }
+.mcp-select-all-row .mcp-row-check { width:16px; height:16px; }
+.mcp-select-all-label { cursor:pointer; }
+.mcp-select-count { margin-left:auto; padding:1px 8px; border-radius:999px; background:var(--soft); color:var(--muted); font-size:10px; font-weight:900; font-variant-numeric:tabular-nums; transition:all .15s ease; }
+.mcp-select-count.is-active { background:var(--accent); color:var(--bg); }
+body.studio-theme-dark .mcp-select-count.is-active { background:#f5f6f8; color:#0e1014; }
+.mcp-select-all-row.is-hidden { display:none; }
+.mcp-workflow-item { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:9px; border:1px solid transparent; background:transparent; transition:background .15s ease, border-color .15s ease, transform .15s ease; }
+.mcp-workflow-item:hover { background:var(--soft); border-color:var(--line); }
+.mcp-workflow-item.is-selected { background:var(--soft); border-color:var(--line-strong); }
+.mcp-row-check { width:16px; height:16px; min-width:16px; min-height:16px; border:1.5px solid var(--line-strong); border-radius:5px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s ease, border-color .15s ease; background:var(--panel); color:var(--bg); flex:0 0 auto; }
+body.studio-theme-dark .mcp-row-check { background:transparent; }
+.mcp-row-check:hover { border-color:var(--text); }
+.mcp-row-check:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.mcp-row-check.is-checked { background:var(--accent); border-color:var(--accent); }
+body.studio-theme-dark .mcp-row-check.is-checked { background:#f5f6f8; border-color:#f5f6f8; color:#0e1014; }
+.mcp-row-check.is-checked::after { content:""; width:9px; height:5px; border-left:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg) translate(1px,-1px); }
+.mcp-row-check.is-disabled { opacity:.35; cursor:not-allowed; }
+body.studio-theme-dark .mcp-row-check.is-disabled { opacity:.3; }
+.mcp-row-check.is-disabled:hover { border-color:var(--line-strong); }
+.mcp-workflow-meta { min-width:0; flex:1; }
+.mcp-workflow-title { font-size:12.5px; font-weight:850; color:var(--text); line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mcp-workflow-sub { font-size:10px; font-weight:700; color:var(--faint); margin-top:2px; display:flex; align-items:center; gap:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mcp-error-tag { color:#dc2626; background:rgba(220,38,38,.08); padding:1px 6px; border-radius:4px; font-weight:700; }
+body.studio-theme-dark .mcp-error-tag { color:#fca5a5; background:rgba(248,113,113,.18); }
+.mcp-import-btn { width:auto !important; height:30px !important; padding:0 12px !important; font-size:11px !important; flex:0 0 auto; }
+.mcp-empty { padding:18px 14px; text-align:center; color:var(--faint); font-size:11px; font-weight:700; border:1px dashed var(--line); border-radius:10px; background:transparent; }
+.mcp-batch-btn { background:var(--accent) !important; color:var(--bg) !important; border-style:solid !important; border-color:var(--accent) !important; opacity:0; pointer-events:none; max-height:0; padding:0 !important; overflow:hidden; transition:opacity .2s ease, max-height .25s ease, transform .15s ease, box-shadow .15s ease; }
+.mcp-batch-btn.is-visible { opacity:1; pointer-events:auto; max-height:48px; }
+.mcp-batch-btn:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(15,23,42,.15); }
+.mcp-batch-btn.is-running { opacity:.6; cursor:wait; pointer-events:none; transform:none !important; box-shadow:none !important; }
+/* Per-item delete button in 工作流列表 */
+.workflow-card-wrap { position:relative; }
+.workflow-card-del { position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:6px; background:transparent; color:var(--faint); display:flex; align-items:center; justify-content:center; opacity:0; cursor:pointer; transition:opacity .15s ease, background .15s ease, color .15s ease; border:0; }
+.workflow-card:hover .workflow-card-del { opacity:1; }
+.workflow-card-del:hover { background:rgba(220,38,38,.1); color:#dc2626; }
+.workflow-card-del:focus-visible { opacity:1; outline:2px solid var(--accent); outline-offset:1px; }
+body.studio-theme-dark .workflow-card-del:hover { background:rgba(127,29,29,.32); color:#fca5a5; }
 @media (max-width:1100px) { .layout { grid-template-columns:1fr; } .sidebar, .preview { position:static; } }
