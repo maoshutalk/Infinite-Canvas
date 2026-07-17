@@ -328,6 +328,17 @@
         }
     }
 
+    function computeFiltered(items, filter, exclude) {
+        const term = (filter || '').trim().toLowerCase();
+        const excl = (exclude || []).map(x => String(x || '').toLowerCase()).filter(Boolean);
+        return (items || []).filter(it => {
+            const hay = `${it.name || ''} ${it.title || ''}`.toLowerCase();
+            if (term && !hay.includes(term)) return false;
+            if (excl.length && excl.some(x => hay.includes(x))) return false;
+            return true;
+        });
+    }
+
     function updateSelectionUi() {
         const r = getRefs();
         if (!r.list) return;
