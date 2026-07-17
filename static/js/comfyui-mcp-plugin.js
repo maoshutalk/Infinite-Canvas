@@ -376,11 +376,14 @@
     function updateSelectionUi() {
         const r = getRefs();
         if (!r.list) return;
+        const filtered = computeFiltered(STATE.items, STATE.filter, STATE.exclude);
+        const importableNames = new Set(
+            filtered.filter(it => it.format === 'ui' || it.format === 'api').map(it => it.name)
+        );
         const items = Array.from(r.list.querySelectorAll('.cmp-item'));
         const visibleImportable = items.filter(el =>
             el.dataset.canImport === 'true' && !el.classList.contains('is-hidden'));
         const selectedInScope = visibleImportable.filter(el => STATE.selected.has(el.dataset.name)).length;
-        const totalSelected = STATE.selected.size;
 
         // Per-row visual
         items.forEach(row => {
@@ -394,17 +397,17 @@
         });
 
         if (r.selectAllRow) {
-            const show = items.some(el => el.dataset.canImport === 'true');
-            r.selectAllRow.classList.toggle('is-hidden', !show);
+            r.selectAllRow.classList.toggle('is-hidden', importableNames.size === 0);
         }
         if (r.selectAllToggle) {
             const hasAny = visibleImportable.length > 0;
-            const allChecked = hasAny && selectedInScope === visibleImportable.length;
+            const allChecked = hasAny && selectedInScope === visibleImportable.length && visibleImportable.length > 0;
             const someChecked = selectedInScope > 0 && selectedInScope < visibleImportable.length;
             r.selectAllToggle.classList.toggle('is-checked', allChecked);
             r.selectAllToggle.classList.toggle('is-indeterminate', someChecked);
             r.selectAllToggle.setAttribute('aria-checked', allChecked ? 'true' : (someChecked ? 'mixed' : 'false'));
         }
+        const totalSelected = STATE.selected.size;
         if (r.selectCount) {
             r.selectCount.textContent = String(totalSelected);
             r.selectCount.classList.toggle('is-active', totalSelected > 0);
@@ -429,16 +432,13 @@
         updateSelectionUi();
     }
     function toggleSelectAll() {
-        const r = getRefs();
-        if (!r.list) return;
-        const rows = Array.from(r.list.querySelectorAll('.cmp-item'));
-        const visible = rows.filter(el =>
-            el.dataset.canImport === 'true' && !el.classList.contains('is-hidden'));
-        if (!visible.length) return;
-        const inScope = visible.map(el => el.dataset.name);
-        const allSelected = inScope.every(n => STATE.selected.has(n));
-        if (allSelected) inScope.forEach(n => STATE.selected.delete(n));
-        else inScope.forEach(n => STATE.selected.add(n));
+        const filtered = computeFiltered(STATE.items, STATE.filter, STATE.exclude);
+        const startIdx = (STATE.page - 1) * STATE.pageSize;
+        const inScope = filtered.slice(startIdx);
+        if (!inScope.length) return;
+        const allSelected = inScope.every(it => STATE.selected.has(it.name));
+        if (allSelected) inScope.forEach(it => STATE.selected.delete(it.name));
+        else inScope.forEach(it => STATE.selected.add(it.name));
         updateSelectionUi();
     }
     function clearSelection() {
@@ -720,6 +720,15 @@
         modal.setAttribute('aria-hidden', 'true');
         STATE.modalOpen = false;
         document.body.classList.remove('cmp-modal-open');
+        // Clear filter/page/selection state on close (per spec: no persistence)
+        STATE.filter = '';
+        STATE.exclude = [];
+        STATE.page = 1;
+        STATE.selected.clear();
+        const searchInput = document.getElementById('cmpSearchInput');
+        if (searchInput) searchInput.value = '';
+        const excludeInput = document.getElementById('cmpExcludeInput');
+        if (excludeInput) excludeInput.value = '';
         if (STATE.prevFocus && typeof STATE.prevFocus.focus === 'function') {
             STATE.prevFocus.focus({ preventScroll: true });
         }
