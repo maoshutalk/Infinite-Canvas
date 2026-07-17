@@ -429,7 +429,6 @@
             return;
         }
         STATE.items = items;
-        setCount(items.length);
 
         // Drop selections that no longer exist.
         const existing = new Set(items.map(i => i.name));
@@ -446,24 +445,20 @@
                 ? `<span class="cmp-error-tag" title="${escapeHtml(item.error)}">⚠ 解析失败</span>`
                 : '';
             const safeName = String(item.name);
-            const checked = STATE.selected.has(safeName);
             const dataAttrs =
                 `data-name="${escapeHtml(safeName)}" ` +
                 `data-title="${escapeHtml(title)}" ` +
-                `data-can-import="${canImport}" ` +
-                `data-selected="${checked ? 'true' : 'false'}"`;
-            const toggleAttr = `tabindex="0" role="checkbox" aria-checked="${checked}" aria-label="${escapeHtml(safeName)}"` +
+                `data-can-import="${canImport}" `;
+            const toggleAttr = `tabindex="0" role="checkbox" aria-checked="${STATE.selected.has(safeName)}" aria-label="${escapeHtml(safeName)}"` +
                 (canImport ? '' : ' aria-disabled="true"');
-            const onToggle = canImport
-                ? `onclick="window.ComfyuiMcpPlugin._toggleRow('${escapeJs(safeName)}', ${checked ? 'false' : 'true'})"`
-                : '';
+            const checkCls = STATE.selected.has(safeName) ? 'is-checked' : '';
             const checkDisabledCls = canImport ? '' : 'is-disabled';
             const importOnclick = canImport
                 ? `onclick="window.ComfyuiMcpPlugin._importOne('${escapeJs(safeName)}', this)"`
                 : 'disabled';
             return `
             <div class="cmp-item" ${dataAttrs}>
-                <span class="cmp-row-check ${checked ? 'is-checked' : ''} ${checkDisabledCls}" ${toggleAttr} ${onToggle}></span>
+                <span class="cmp-row-check ${checkCls} ${checkDisabledCls}" ${toggleAttr}></span>
                 <div class="cmp-item-meta">
                     <div class="cmp-item-title" title="${escapeHtml(safeName)}">${escapeHtml(title)}</div>
                     <div class="cmp-item-sub">[${fmt}] · ${sizeKb}KB · ${date}${errorTag ? ' · ' + errorTag : ''}</div>
@@ -498,7 +493,13 @@
                 ]);
                 const matched = statusRes.matched_instance || '';
                 const fileCount = statusRes.file_count || 0;
-                setBadge(statusRes.state, matched ? `${matched} · ${fileCount} 个工作流` : null);
+                setBadge(statusRes.state);
+                setCount(fileCount);
+                if (matched) {
+                    setHint(`${matched} · ${fileCount} 个工作流`);
+                } else {
+                    setHint('');
+                }
                 if (statusRes.state === 'mismatch') {
                     const url = statusRes.comfyui_url || '?';
                     const norm = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -640,6 +641,30 @@
 
         refreshIcons();
         document.addEventListener('keydown', onGlobalKeydown);
+
+        // Event delegation for checkbox toggle — bound once on the list container.
+        const listEl = document.getElementById('cmpList');
+        if (listEl) {
+            listEl.addEventListener('click', (e) => {
+                const chk = e.target.closest('.cmp-row-check');
+                if (!chk || chk.classList.contains('is-disabled')) return;
+                const row = chk.closest('.cmp-item');
+                const name = row ? row.dataset.name : null;
+                if (!name) return;
+                toggleRow(name, !STATE.selected.has(name));
+            });
+            listEl.addEventListener('keydown', (e) => {
+                if (e.key !== ' ' && e.key !== 'Enter') return;
+                const chk = e.target.closest('.cmp-row-check');
+                if (!chk || chk.classList.contains('is-disabled')) return;
+                e.preventDefault();
+                const row = chk.closest('.cmp-item');
+                const name = row ? row.dataset.name : null;
+                if (!name) return;
+                toggleRow(name, !STATE.selected.has(name));
+            });
+        }
+
         loadStatusAndList();
     }
 
