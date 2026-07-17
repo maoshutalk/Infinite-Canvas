@@ -1393,5 +1393,132 @@ document.addEventListener('DOMContentLoaded', () => {
     if(window.StudioI18n) StudioI18n.apply();
     loadList();
     loadComfyInstances();
+    loadMcpStatusAndList();
 });
+
+// ============================================================
+// ComfyUI MCP 源
+// ============================================================
+
+const MCP_STATE_LABELS = {
+    loading: { text: "检测中…", cls: "mcp-state-loading" },
+    connected: { text: "已连接", cls: "mcp-state-connected" },
+    mismatch: { text: "地址不匹配", cls: "mcp-state-mismatch" },
+    not_configured: { text: "未配置", cls: "mcp-state-unset" },
+    dir_missing: { text: "工作流目录不存在", cls: "mcp-state-unset" },
+};
+
+function setMcpBadge(state, customText) {
+    const badge = document.getElementById("mcpStatusBadge");
+    if (!badge) return;
+    const meta = MCP_STATE_LABELS[state] || MCP_STATE_LABELS.loading;
+    badge.textContent = (customText ? customText + " · " : "") + meta.text;
+    badge.className = "mcp-status-badge " + meta.cls;
+}
+
+function setMcpHint(text) {
+    const hint = document.getElementById("mcpStatusHint");
+    if (hint) hint.textContent = text || "";
+}
+
+function renderMcpWorkflows(items) {
+    const list = document.getElementById("mcpWorkflowList");
+    if (!list) return;
+    if (!items || !items.length) {
+        list.innerHTML = '<div class="mcp-empty">暂无工作流</div>';
+        return;
+    }
+    list.innerHTML = items.map(item => {
+        const fmt = item.format || "unknown";
+        const canImport = fmt === "ui" || fmt === "api";
+        const title = item.title || item.name;
+        const sizeKb = (item.size / 1024).toFixed(1);
+        const date = item.mtime ? new Date(item.mtime).toLocaleString() : "";
+        const errorTag = item.error ? ` <span class="mcp-error-tag">⚠ ${escapeHtml(item.error)}</span>` : "";
+        const disabledAttr = canImport ? "" : "disabled";
+        const disabledTitle = canImport ? "" : "格式无法识别，无法导入";
+        const safeName = String(item.name).replace(/'/g, "\\'");
+        return `
+        <div class="mcp-workflow-item" data-name="${escapeHtml(item.name)}">
+            <div class="mcp-workflow-meta">
+                <div class="mcp-workflow-title" title="${escapeHtml(item.name)}">${escapeHtml(title)}</div>
+                <div class="mcp-workflow-sub">[${fmt}] · ${sizeKb}KB · ${date}${errorTag}</div>
+            </div>
+            <button class="upload-btn mcp-import-btn" type="button"
+                    ${disabledAttr} title="${disabledTitle}"
+                    onclick="importMcpWorkflow('${escapeHtml(item.name)}', this)">
+                <i data-lucide="download" class="w-3 h-3"></i><span>导入</span>
+            </button>
+        </div>`;
+    }).join("");
+    if (window.lucide) window.lucide.createIcons();
+}
+
+async function loadMcpStatusAndList() {
+    setMcpBadge("loading");
+    setMcpHint("");
+    const listEl = document.getElementById("mcpWorkflowList");
+    if (listEl) listEl.innerHTML = '<div class="mcp-empty">加载中…</div>';
+
+    try {
+        const [statusRes, listRes] = await Promise.all([
+            fetch("/api/mcp/status").then(r => r.json()),
+            fetch("/api/mcp/workflows").then(r => r.json()),
+        ]);
+
+        const matched = statusRes.matched_instance || "";
+        const fileCount = statusRes.file_count || 0;
+        setMcpBadge(statusRes.state, matched ? `${matched} · ${fileCount} 个工作流` : null);
+
+        if (statusRes.state === "mismatch") {
+            const url = statusRes.comfyui_url || "?";
+            const norm = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+            setMcpHint(`MCP 指向 ${norm}，但当前未配置为 ComfyUI 后端`);
+        } else if (statusRes.state === "not_configured") {
+            setMcpHint(`未找到 MCP 配置文件：${statusRes.config_path || ""}`);
+        } else if (statusRes.state === "dir_missing") {
+            setMcpHint(`工作流目录不存在：${statusRes.workflows_dir || ""}`);
+        } else if (statusRes.error) {
+            setMcpHint(`配置错误：${statusRes.error}`);
+        }
+
+        renderMcpWorkflows(listRes.workflows || []);
+    } catch (err) {
+        setMcpBadge("not_configured");
+        setMcpHint("无法连接到本地服务");
+        const listEl2 = document.getElementById("mcpWorkflowList");
+        if (listEl2) listEl2.innerHTML = "";
+    }
+}
+
+async function importMcpWorkflow(name, btnEl) {
+    if (!name) return;
+    const originalHtml = btnEl.innerHTML;
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<i data-lucide="loader" class="w-3 h-3"></i><span>导入中</span>';
+    if (window.lucide) window.lucide.createIcons();
+
+    try {
+        const res = await fetch(
+            `/api/mcp/workflows/${encodeURIComponent(name)}/import`,
+            { method: "POST" }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.detail || `HTTP ${res.status}`);
+        }
+        showToast?.(`已导入 ${data.name}`);
+        // Refresh main workflow list (loadList is the existing refresh in this file)
+        if (typeof loadList === "function") {
+            await loadList();
+        }
+        // Refresh MCP list to show updated collision-safe names if any
+        await loadMcpStatusAndList();
+    } catch (err) {
+        showToast?.(`导入失败: ${err.message}`, true);
+        btnEl.disabled = false;
+        btnEl.innerHTML = originalHtml;
+        if (window.lucide) window.lucide.createIcons();
+    }
+}
 
