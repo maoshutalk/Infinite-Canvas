@@ -1,7 +1,3 @@
-
-._!
-._*
-
 .codebase-memory/
 .claude/
 API/.env
@@ -11,3 +7,8 @@ workflows/custom/
 assets/output/
 assets/input/
 history.json
+
+
+._!
+._*
+
