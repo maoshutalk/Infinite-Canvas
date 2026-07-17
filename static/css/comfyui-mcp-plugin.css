@@ -14,8 +14,6 @@
 .comfyui-mcp-root .cmp-title { font-size:11px; font-weight:800; color:var(--muted); padding:0; }
 .comfyui-mcp-root .cmp-count { font-size:10.5px; font-weight:900; color:var(--muted); padding:2px 8px; border-radius:999px; background:var(--soft); border:1px solid var(--line); font-variant-numeric:tabular-nums; line-height:1.2; }
 .comfyui-mcp-root .cmp-status-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-.comfyui-mcp-root .cmp-open-btn { flex:1; min-width:0; height:30px; padding:0 10px !important; font-size:11px !important; font-weight:800 !important; gap:6px; }
-.comfyui-mcp-root .cmp-open-btn i { flex:0 0 auto; }
 .comfyui-mcp-root .cmp-hint { font-size:10px; font-weight:600; color:var(--faint); line-height:1.45; min-height:14px; word-break:break-all; }
 
 /* ---------- Status badge (used in compact card AND modal header) ---------- */
