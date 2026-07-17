@@ -2,8 +2,9 @@
  * comfyui-mcp-plugin.js — ComfyUI MCP import feature as a loadable plugin.
  *
  * Scans the host page for these anchor points and mounts itself:
- *   - [data-comfyui-mcp-mount]   → compact sidebar card (badge + count + 打开导入)
- *   - [data-comfyui-mcp-trigger] → button row next to "上传工作流"
+ *   - [data-comfyui-mcp-mount]   → compact sidebar card (status badge + workflow count)
+ *   - [data-comfyui-mcp-trigger] → "MCP 导入" button next to "上传工作流"
+ *   - The trigger button is the only clickable entry point.
  *   - First form opens an import modal appended to <body>.
  *
  * Host integration (graceful, no-op if missing):
@@ -103,6 +104,9 @@
     }
 
     function buildCompactCard() {
+        // Compact card is status-only — the clickable entry point lives
+        // in the 工作流列表 card footer (data-comfyui-mcp-trigger) so
+        // there's exactly one way to open the modal.
         return el('div', { class: 'side-card cmp-card' }, [
             el('div', { class: 'cmp-title-row' }, [
                 el('div', { class: 'cmp-title', textContent: 'ComfyUI MCP 源' }),
@@ -110,10 +114,6 @@
             ]),
             el('div', { class: 'cmp-status-row' }, [
                 el('div', { id: 'cmpBadgeCompact', class: 'cmp-badge cmp-state-loading', textContent: '检测中…' }),
-                el('button', { id: 'cmpOpenBtn', class: 'upload-btn cmp-open-btn', type: 'button', onclick: openModal }, [
-                    el('i', { dataset: { lucide: 'cloud-download' }, class: 'w-3.5 h-3.5' }),
-                    el('span', { textContent: '打开导入' }),
-                ]),
             ]),
             el('div', { id: 'cmpHintCompact', class: 'cmp-hint' }),
         ]);
