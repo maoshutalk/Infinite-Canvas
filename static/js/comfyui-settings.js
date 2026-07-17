@@ -1451,6 +1451,8 @@ const MCP_STATE_LABELS = {
 const mcpSelectedNames = new Set();
 // Latest loaded list — used by toggleMcpSelectAll and importMcpWorkflows.
 let mcpLatestItems = [];
+// Current search filter (lower-case substring); "all" means show everything.
+let mcpFilterTerm = "";
 
 function setMcpBadge(state, customText) {
     const badge = document.getElementById("mcpStatusBadge");
@@ -1465,16 +1467,48 @@ function setMcpHint(text) {
     if (hint) hint.textContent = text || "";
 }
 
+function mcpApplyFilterToRows() {
+    // Show/hide DOM rows based on the current search term. Selection state
+    // is preserved across filter changes (the Set is the source of truth).
+    const term = mcpFilterTerm;
+    const rows = Array.from(document.querySelectorAll(".mcp-workflow-item"));
+    let visible = 0;
+    rows.forEach(el => {
+        const name = (el.dataset.name || "").toLowerCase();
+        const title = (el.dataset.title || "").toLowerCase();
+        const hit = !term || name.includes(term) || title.includes(term);
+        el.classList.toggle("is-hidden", !hit);
+        if (hit) visible++;
+    });
+    const list = document.getElementById("mcpWorkflowList");
+    let noMatch = list?.querySelector(".mcp-no-match");
+    if (!visible && rows.length && term) {
+        if (!noMatch) {
+            noMatch = document.createElement("div");
+            noMatch.className = "mcp-empty mcp-no-match";
+            noMatch.textContent = `没有匹配 “${term}” 的工作流`;
+            list.appendChild(noMatch);
+        } else {
+            noMatch.textContent = `没有匹配 “${term}” 的工作流`;
+            noMatch.classList.remove("is-hidden");
+        }
+    } else if (noMatch) {
+        noMatch.remove();
+    }
+}
+
 function mcpUpdateSelectionUi() {
     const items = Array.from(document.querySelectorAll(".mcp-workflow-item"));
-    const importable = items.filter(el => el.dataset.canImport === "true");
-    const selectedCount = importable.filter(el => el.dataset.selected === "true").length;
+    const visibleImportable = items.filter(el =>
+        el.dataset.canImport === "true" && !el.classList.contains("is-hidden")
+    );
+    const selectedInScope = visibleImportable.filter(el => mcpSelectedNames.has(el.dataset.name)).length;
+    const totalSelected = mcpSelectedNames.size;
 
-    // Per-row visual state
+    // Per-row visual state (only affects visible-or-not? keep is-selected as a hint)
     items.forEach(el => {
         const name = el.dataset.name;
         const isSel = mcpSelectedNames.has(name);
-        el.dataset.selected = isSel ? "true" : "false";
         const chk = el.querySelector(".mcp-row-check");
         if (chk) {
             chk.classList.toggle("is-checked", isSel);
@@ -1484,33 +1518,39 @@ function mcpUpdateSelectionUi() {
 
     const allRow = document.getElementById("mcpSelectAllRow");
     if (allRow) {
-        const show = importable.length > 0;
+        const show = items.some(el => el.dataset.canImport === "true");
         allRow.classList.toggle("is-hidden", !show);
     }
 
     const toggle = document.getElementById("mcpSelectAllToggle");
     if (toggle) {
-        const allChecked = importable.length > 0 && selectedCount === importable.length;
-        const someChecked = selectedCount > 0 && selectedCount < importable.length;
+        const hasAny = visibleImportable.length > 0;
+        const allChecked = hasAny && selectedInScope === visibleImportable.length;
+        const someChecked = selectedInScope > 0 && selectedInScope < visibleImportable.length;
         toggle.classList.toggle("is-checked", allChecked);
-        toggle.setAttribute("aria-checked", allChecked ? "true" : "false");
         toggle.classList.toggle("is-indeterminate", someChecked);
+        toggle.setAttribute("aria-checked", allChecked ? "true" : (someChecked ? "mixed" : "false"));
     }
 
     const countEl = document.getElementById("mcpSelectCount");
     if (countEl) {
-        countEl.textContent = String(selectedCount);
-        countEl.classList.toggle("is-active", selectedCount > 0);
+        countEl.textContent = String(totalSelected);
+        countEl.classList.toggle("is-active", totalSelected > 0);
     }
+
+    const clearBtn = document.getElementById("mcpClearSelectionBtn");
+    if (clearBtn) clearBtn.classList.toggle("is-hidden", totalSelected === 0);
 
     const batchBtn = document.getElementById("mcpBatchImportBtn");
     const batchLbl = document.getElementById("mcpBatchBtnLabel");
     if (batchBtn) {
-        batchBtn.classList.toggle("is-visible", selectedCount > 0);
-        batchBtn.disabled = selectedCount === 0;
-        batchBtn.setAttribute("aria-disabled", selectedCount === 0 ? "true" : "false");
+        batchBtn.classList.toggle("is-visible", totalSelected > 0);
+        batchBtn.disabled = totalSelected === 0;
+        batchBtn.setAttribute("aria-disabled", totalSelected === 0 ? "true" : "false");
     }
-    if (batchLbl) batchLbl.textContent = `导入选中 (${selectedCount})`;
+    if (batchLbl) {
+        batchLbl.textContent = totalSelected > 0 ? `导入选中 (${totalSelected})` : "导入选中 (0)";
+    }
 }
 
 function toggleMcpRow(name, checked) {
@@ -1521,14 +1561,42 @@ function toggleMcpRow(name, checked) {
 }
 
 function toggleMcpSelectAll() {
-    const importable = mcpLatestItems.filter(it => it.format === "ui" || it.format === "api");
-    if (!importable.length) return;
-    const allSelected = importable.every(it => mcpSelectedNames.has(it.name));
+    const rows = Array.from(document.querySelectorAll(".mcp-workflow-item"));
+    const visibleImportable = rows.filter(el =>
+        el.dataset.canImport === "true" && !el.classList.contains("is-hidden")
+    );
+    if (!visibleImportable.length) return;
+    const inScope = visibleImportable.map(el => el.dataset.name);
+    const allSelected = inScope.every(n => mcpSelectedNames.has(n));
     if (allSelected) {
-        importable.forEach(it => mcpSelectedNames.delete(it.name));
+        inScope.forEach(n => mcpSelectedNames.delete(n));
     } else {
-        importable.forEach(it => mcpSelectedNames.add(it.name));
+        inScope.forEach(n => mcpSelectedNames.add(n));
     }
+    mcpUpdateSelectionUi();
+}
+
+function clearMcpSelection() {
+    if (!mcpSelectedNames.size) return;
+    mcpSelectedNames.clear();
+    mcpUpdateSelectionUi();
+}
+
+function onMcpSearchInput(value) {
+    mcpFilterTerm = String(value || "").trim().toLowerCase();
+    const clearBtn = document.getElementById("mcpSearchClear");
+    if (clearBtn) clearBtn.classList.toggle("is-hidden", mcpFilterTerm.length === 0);
+    mcpApplyFilterToRows();
+    mcpUpdateSelectionUi();
+}
+
+function clearMcpSearch() {
+    const input = document.getElementById("mcpSearchInput");
+    if (input) input.value = "";
+    mcpFilterTerm = "";
+    const clearBtn = document.getElementById("mcpSearchClear");
+    if (clearBtn) clearBtn.classList.add("is-hidden");
+    mcpApplyFilterToRows();
     mcpUpdateSelectionUi();
 }
 
@@ -1544,7 +1612,8 @@ function renderMcpWorkflows(items) {
     mcpLatestItems = items;
     // Drop selections that no longer exist (file disappeared from disk).
     const existing = new Set(items.map(i => i.name));
-    Array.from(mcpSelectedNames).forEach(n => { if (!existing.has(n)) mcpSelectedNames.delete(n); });
+    if (existing.size === 0) mcpSelectedNames.clear();
+    else Array.from(mcpSelectedNames).forEach(n => { if (!existing.has(n)) mcpSelectedNames.delete(n); });
 
     list.innerHTML = items.map(item => {
         const fmt = item.format || "unknown";
@@ -1554,15 +1623,17 @@ function renderMcpWorkflows(items) {
         const date = item.mtime ? new Date(item.mtime).toLocaleString() : "";
         const errorTag = item.error ? `<span class="mcp-error-tag" title="${escapeHtml(item.error)}">⚠ 解析失败</span>` : "";
         const safeName = String(item.name);
-        const checked = mcpSelectedNames.has(safeName) ? "true" : "false";
-        const checkedCls = mcpSelectedNames.has(safeName) ? "is-checked" : "";
-        const safeAttr = `data-name="${escapeHtml(safeName)}" data-can-import="${canImport}" data-selected="${checked}"`;
+        const checked = mcpSelectedNames.has(safeName);
+        const checkedCls = checked ? "is-checked" : "";
+        const dataAttrs = `data-name="${escapeHtml(safeName)}" data-title="${escapeHtml(title)}" data-can-import="${canImport}" data-selected="${checked ? 'true' : 'false'}"`;
         const toggleAttr = `tabindex="0" role="checkbox" aria-checked="${checked}" aria-label="${escapeHtml(safeName)}"`
             + (canImport ? "" : ' aria-disabled="true"');
-        const onToggle = canImport ? `onclick="toggleMcpRow('${escapeJs(safeName)}', ${mcpSelectedNames.has(safeName) ? 'false' : 'true'})" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleMcpRow('${escapeJs(safeName)}', ${mcpSelectedNames.has(safeName) ? 'false' : 'true'});}"` : "";
+        const onToggle = canImport
+            ? `onclick="toggleMcpRow('${escapeJs(safeName)}', ${checked ? 'false' : 'true'})" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleMcpRow('${escapeJs(safeName)}', ${checked ? 'false' : 'true'});}"`
+            : "";
         const checkDisabledCls = canImport ? "" : "is-disabled";
         return `
-        <div class="mcp-workflow-item" ${safeAttr}>
+        <div class="mcp-workflow-item" ${dataAttrs}>
             <span class="mcp-row-check ${checkedCls} ${checkDisabledCls}" ${toggleAttr} ${onToggle}></span>
             <div class="mcp-workflow-meta">
                 <div class="mcp-workflow-title" title="${escapeHtml(safeName)}">${escapeHtml(title)}</div>
@@ -1577,6 +1648,7 @@ function renderMcpWorkflows(items) {
         </div>`;
     }).join("");
     if (window.lucide) window.lucide.createIcons();
+    mcpApplyFilterToRows();
     mcpUpdateSelectionUi();
 }
 
@@ -1642,12 +1714,12 @@ async function importMcpWorkflow(name, btnEl) {
         }
         showToast?.(`已导入 ${data.name}`);
         mcpSelectedNames.delete(name);
-        // Refresh main workflow list (loadList is the existing refresh in this file)
-        if (typeof loadList === "function") {
-            await loadList();
-        }
-        // Refresh MCP list to show updated collision-safe names if any
-        await loadMcpStatusAndList();
+        // Refresh in parallel — main list + MCP list. Promise.all halves
+        // the time the page can feel unresponsive on slow connections.
+        await Promise.all([
+            typeof loadList === "function" ? loadList() : Promise.resolve(),
+            loadMcpStatusAndList(),
+        ]);
     } catch (err) {
         showToast?.(`导入失败: ${err.message}`, true);
         btnEl.disabled = false;
@@ -1689,12 +1761,13 @@ async function importMcpWorkflows() {
             showToast?.(`导入失败：${failedNames.slice(0, 2).join("、")}${failedNames.length > 2 ? "…" : ""}`, true);
         }
 
-        // Drop selections whose file no longer exists in MCP, regardless of success.
+        // Drop selections regardless of success — the imported copies live in
+        // the main 工作流列表 now, so re-importing from MCP is a no-op anyway.
         names.forEach(n => mcpSelectedNames.delete(n));
-        if (typeof loadList === "function") {
-            await loadList();
-        }
-        await loadMcpStatusAndList();
+        await Promise.all([
+            typeof loadList === "function" ? loadList() : Promise.resolve(),
+            loadMcpStatusAndList(),
+        ]);
     } catch (err) {
         showToast?.(`批量导入失败: ${err.message}`, true);
         if (batchLbl) batchLbl.textContent = `导入选中 (${names.length})`;

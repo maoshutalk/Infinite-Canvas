@@ -61,7 +61,15 @@
                         <div id="mcpSelectAllRow" class="mcp-select-all-row is-hidden">
                             <span id="mcpSelectAllToggle" class="mcp-row-check" tabindex="0" role="checkbox" aria-checked="false" aria-label="全选" onclick="toggleMcpSelectAll()" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleMcpSelectAll();}"></span>
                             <span class="mcp-select-all-label" onclick="toggleMcpSelectAll()">全选</span>
+                            <button type="button" id="mcpClearSelectionBtn" class="mcp-clear-selection is-hidden" onclick="clearMcpSelection()" title="清空选择">清空</button>
                             <span id="mcpSelectCount" class="mcp-select-count">0</span>
+                        </div>
+                        <div class="mcp-search-row">
+                            <i data-lucide="search" class="w-3 h-3 mcp-search-icon"></i>
+                            <input id="mcpSearchInput" type="search" placeholder="搜索工作流" autocomplete="off" spellcheck="false" oninput="onMcpSearchInput(this.value)" />
+                            <button id="mcpSearchClear" type="button" class="mcp-search-clear is-hidden" onclick="clearMcpSearch()" aria-label="清空搜索" title="清空搜索">
+                                <i data-lucide="x" class="w-3 h-3"></i>
+                            </button>
                         </div>
                         <div id="mcpWorkflowList" class="workflow-list mcp-workflow-list"></div>
                         <button id="mcpBatchImportBtn" class="upload-btn mcp-batch-btn" type="button" onclick="importMcpWorkflows()" aria-label="批量导入选中工作流">
