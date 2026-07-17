@@ -66,3 +66,42 @@ test('computeFiltered: empty/whitespace-only exclude terms ignored', () => {
     const r = computeFiltered(SAMPLE, '', ['', '  ', 'archived']);
     assert.equal(r.length, 3);
 });
+
+const parseExclude = (input) => {
+    const raw = String(input || '').trim();
+    if (!raw) return [];
+    const seen = new Set();
+    raw.split(/\s+/).forEach(t => {
+        const lower = t.toLowerCase();
+        if (lower && !seen.has(lower)) seen.add(lower);
+    });
+    return Array.from(seen);
+};
+
+test('parseExclude: empty string → []', () => {
+    assert.deepEqual(parseExclude(''), []);
+});
+
+test('parseExclude: whitespace-only → []', () => {
+    assert.deepEqual(parseExclude('   '), []);
+});
+
+test('parseExclude: single keyword', () => {
+    assert.deepEqual(parseExclude('archived'), ['archived']);
+});
+
+test('parseExclude: multiple space-separated', () => {
+    assert.deepEqual(parseExclude('archived test foo'), ['archived', 'test', 'foo']);
+});
+
+test('parseExclude: dedupes case-insensitively', () => {
+    assert.deepEqual(parseExclude('Archived ARCHIVED archived'), ['archived']);
+});
+
+test('parseExclude: drops empty tokens from double spaces', () => {
+    assert.deepEqual(parseExclude('archived  test'), ['archived', 'test']);
+});
+
+test('parseExclude: lowercases output', () => {
+    assert.deepEqual(parseExclude('ARCHIVED Test'), ['archived', 'test']);
+});

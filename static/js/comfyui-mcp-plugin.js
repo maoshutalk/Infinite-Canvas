@@ -41,6 +41,17 @@
         importBatch:'/api/mcp/workflows/import-batch',
     };
 
+    function parseExclude(input) {
+        const raw = String(input || '').trim();
+        if (!raw) return [];
+        const seen = new Set();
+        raw.split(/\s+/).forEach(t => {
+            const lower = t.toLowerCase();
+            if (lower && !seen.has(lower)) seen.add(lower);
+        });
+        return Array.from(seen);
+    }
+
     // ---------- Helpers ----------
     function escapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
