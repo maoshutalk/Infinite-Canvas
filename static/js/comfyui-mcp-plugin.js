@@ -1,0 +1,662 @@
+/*
+ * comfyui-mcp-plugin.js — ComfyUI MCP import feature as a loadable plugin.
+ *
+ * Scans the host page for these anchor points and mounts itself:
+ *   - [data-comfyui-mcp-mount]   → compact sidebar card (badge + count + 打开导入)
+ *   - [data-comfyui-mcp-trigger] → button row next to "上传工作流"
+ *   - First form opens an import modal appended to <body>.
+ *
+ * Host integration (graceful, no-op if missing):
+ *   - window.loadList()  : refresh main workflow list after import
+ *   - window.showToast() : success/error notifications
+ *
+ * Public API: window.ComfyuiMcpPlugin = { openModal, closeModal, refresh }.
+ */
+(function () {
+    'use strict';
+
+    // ---------- State ----------
+    const STATE = {
+        items: [],                  // latest list from /api/mcp/workflows
+        selected: new Set(),        // checked workflow names
+        filter: '',                 // search filter (lowercased)
+        modalOpen: false,
+        prevFocus: null,
+        refreshInflight: null,
+    };
+
+    const MCP_STATE_LABELS = {
+        loading:        { text: '检测中…',            cls: 'cmp-state-loading' },
+        connected:      { text: '已连接',              cls: 'cmp-state-connected' },
+        mismatch:       { text: '地址不匹配',          cls: 'cmp-state-mismatch' },
+        not_configured: { text: '未配置',              cls: 'cmp-state-unset' },
+        dir_missing:    { text: '工作流目录不存在',     cls: 'cmp-state-unset' },
+    };
+
+    const API = {
+        status: '/api/mcp/status',
+        list:   '/api/mcp/workflows',
+        importOne:  (name) => `/api/mcp/workflows/${encodeURIComponent(name)}/import`,
+        importBatch:'/api/mcp/workflows/import-batch',
+    };
+
+    // ---------- Helpers ----------
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+    function escapeJs(s) {
+        return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+    function refreshIcons() {
+        if (window.lucide) window.lucide.createIcons();
+    }
+    function toast(text, isError) {
+        if (typeof window.showToast === 'function') {
+            window.showToast(text, isError);
+        } else if (isError) {
+            console.error('[mcp-plugin]', text);
+        }
+    }
+    async function refreshHostList() {
+        if (typeof window.loadList === 'function') {
+            try { await window.loadList(); } catch (_) { /* host-side error ignored */ }
+        }
+    }
+    function el(tag, attrs, children) {
+        const node = document.createElement(tag);
+        if (attrs) {
+            for (const [k, v] of Object.entries(attrs)) {
+                if (v == null || v === false) continue;
+                if (k === 'class') node.className = v;
+                else if (k === 'dataset') Object.assign(node.dataset, v);
+                else if (k.startsWith('on') && typeof v === 'function') {
+                    node.addEventListener(k.slice(2).toLowerCase(), v);
+                } else if (k === 'html') node.innerHTML = v;
+                else if (k in node) node[k] = v;
+                else node.setAttribute(k, v);
+            }
+        }
+        if (children != null) {
+            const arr = Array.isArray(children) ? children : [children];
+            arr.forEach(c => {
+                if (c == null) return;
+                if (typeof c === 'string') node.appendChild(document.createTextNode(c));
+                else node.appendChild(c);
+            });
+        }
+        return node;
+    }
+
+    // ---------- DOM construction ----------
+    // Each mounted piece is wrapped in a `display:contents` div with class
+    // `comfyui-mcp-root` so its scoped CSS rules apply, but layout is
+    // unaffected. The compact card lives next to its sidebar slot; the
+    // trigger button lives inside the 工作流列表 footer; the modal lives
+    // on <body>. All three carry the same root class — descendants match.
+    function wrapRoot(child) {
+        const wrap = document.createElement('div');
+        wrap.className = 'comfyui-mcp-root';
+        wrap.appendChild(child);
+        return wrap;
+    }
+
+    function buildCompactCard() {
+        return el('div', { class: 'side-card cmp-card' }, [
+            el('div', { class: 'cmp-title-row' }, [
+                el('div', { class: 'cmp-title', textContent: 'ComfyUI MCP 源' }),
+                el('div', { id: 'cmpCount', class: 'cmp-count', textContent: '—', title: '工作流数量' }),
+            ]),
+            el('div', { class: 'cmp-status-row' }, [
+                el('div', { id: 'cmpBadgeCompact', class: 'cmp-badge cmp-state-loading', textContent: '检测中…' }),
+                el('button', { id: 'cmpOpenBtn', class: 'upload-btn cmp-open-btn', type: 'button', onclick: openModal }, [
+                    el('i', { dataset: { lucide: 'cloud-download' }, class: 'w-3.5 h-3.5' }),
+                    el('span', { textContent: '打开导入' }),
+                ]),
+            ]),
+            el('div', { id: 'cmpHintCompact', class: 'cmp-hint' }),
+        ]);
+    }
+
+    function buildTriggerButton() {
+        // Stand-alone button styled like the host's "上传工作流" button.
+        return el('button', {
+            class: 'upload-btn',
+            type: 'button',
+            style: 'flex:1',
+            title: '从 ComfyUI MCP 源导入',
+            onclick: openModal,
+        }, [
+            el('i', { dataset: { lucide: 'cloud-download' }, class: 'w-3.5 h-3.5' }),
+            el('span', { textContent: 'MCP 导入' }),
+        ]);
+    }
+
+    function buildModal() {
+        const modal = el('div', {
+            id: 'cmpModal',
+            class: 'cmp-modal',
+            ariaHidden: 'true',
+            role: 'dialog',
+            ariaModal: 'true',
+            ariaLabelledby: 'cmpModalTitle',
+        });
+        const backdrop = el('div', { class: 'cmp-modal-backdrop', onclick: closeModal });
+        backdrop.addEventListener('click', closeModal);
+
+        const panel = el('div', { class: 'cmp-modal-panel', role: 'document' });
+
+        const header = el('header', { class: 'cmp-modal-header' }, [
+            el('div', { class: 'cmp-modal-title-row' }, [
+                el('i', { dataset: { lucide: 'cloud-download' }, class: 'w-4 h-4', style: 'color:var(--muted)' }),
+                el('h2', { id: 'cmpModalTitle', class: 'cmp-modal-title', textContent: '从 ComfyUI MCP 源导入' }),
+                el('button', {
+                    type: 'button',
+                    class: 'cmp-modal-icon-btn',
+                    title: '刷新',
+                    ariaLabel: '刷新',
+                    onclick: () => loadStatusAndList(),
+                }, [el('i', { dataset: { lucide: 'refresh-cw' }, class: 'w-3.5 h-3.5' })]),
+                el('button', {
+                    type: 'button',
+                    class: 'cmp-modal-icon-btn',
+                    title: '关闭 (Esc)',
+                    ariaLabel: '关闭',
+                    onclick: closeModal,
+                }, [el('i', { dataset: { lucide: 'x' }, class: 'w-4 h-4' })]),
+            ]),
+            el('div', { class: 'cmp-modal-status-row' }, [
+                el('div', { id: 'cmpBadgeModal', class: 'cmp-badge cmp-state-loading', textContent: '检测中…' }),
+                el('span', { id: 'cmpHintModal', class: 'cmp-hint' }),
+            ]),
+        ]);
+
+        const searchRow = el('div', { class: 'cmp-search' }, [
+            el('i', { dataset: { lucide: 'search' }, class: 'w-3 h-3 cmp-search-icon' }),
+            el('input', {
+                id: 'cmpSearchInput',
+                type: 'search',
+                placeholder: '搜索工作流',
+                autocomplete: 'off',
+                spellcheck: false,
+                oninput: (e) => onSearchInput(e.target.value),
+            }),
+            el('button', {
+                id: 'cmpSearchClear',
+                type: 'button',
+                class: 'cmp-search-clear is-hidden',
+                ariaLabel: '清空搜索',
+                title: '清空搜索',
+                onclick: clearSearch,
+            }, [el('i', { dataset: { lucide: 'x' }, class: 'w-3 h-3' })]),
+        ]);
+
+        const selectAllRow = el('div', { id: 'cmpSelectAllRow', class: 'cmp-select-all is-hidden' }, [
+            el('span', {
+                id: 'cmpSelectAllToggle',
+                class: 'cmp-row-check',
+                tabIndex: 0,
+                role: 'checkbox',
+                ariaChecked: 'false',
+                ariaLabel: '全选',
+                onclick: toggleSelectAll,
+                onkeydown: (e) => {
+                    if (e.key === ' ' || e.key === 'Enter') {
+                        e.preventDefault();
+                        toggleSelectAll();
+                    }
+                },
+            }),
+            el('span', { class: 'cmp-select-all-label', onclick: toggleSelectAll, textContent: '全选' }),
+            el('button', {
+                type: 'button',
+                id: 'cmpClearSelectionBtn',
+                class: 'cmp-clear-selection is-hidden',
+                title: '清空选择',
+                onclick: clearSelection,
+                textContent: '清空',
+            }),
+            el('span', { id: 'cmpSelectCount', class: 'cmp-select-count', textContent: '0' }),
+        ]);
+
+        const toolbar = el('div', { class: 'cmp-modal-toolbar' }, [selectAllRow, searchRow]);
+        const list = el('div', { id: 'cmpList', class: 'cmp-list' });
+
+        const body = el('div', { class: 'cmp-modal-body' }, [toolbar, list]);
+
+        const footer = el('footer', { class: 'cmp-modal-footer' }, [
+            el('div', { class: 'cmp-modal-footer-info' }, [
+                el('i', { dataset: { lucide: 'info' }, class: 'w-3 h-3' }),
+                el('span', { textContent: '勾选要导入的工作流，支持批量' }),
+            ]),
+            el('div', { class: 'cmp-modal-footer-actions' }, [
+                el('button', { type: 'button', class: 'cmp-action-btn', onclick: closeModal, textContent: '取消' }),
+                el('button', {
+                    id: 'cmpBatchImportBtn',
+                    type: 'button',
+                    class: 'cmp-action-btn is-primary',
+                    'aria-label': '批量导入选中工作流',
+                    onclick: importMany,
+                    disabled: true,
+                }, [
+                    el('span', { class: 'btn-label' }, [
+                        el('i', { dataset: { lucide: 'download' }, class: 'w-3.5 h-3.5' }),
+                        el('span', { id: 'cmpBatchBtnLabel', textContent: '导入选中 (0)' }),
+                    ]),
+                ]),
+            ]),
+        ]);
+
+        panel.append(header, body, footer);
+        modal.append(backdrop, panel);
+        return modal;
+    }
+
+    // ---------- Badge / hint (writes to compact card AND modal) ----------
+    // All element IDs are unique within the page, so document.getElementById
+    // (rather than querySelector(root)) works regardless of which subtree
+    // each piece ended up in.
+    function getRefs() {
+        return {
+            badgeCompact: document.getElementById('cmpBadgeCompact'),
+            badgeModal: document.getElementById('cmpBadgeModal'),
+            hintCompact: document.getElementById('cmpHintCompact'),
+            hintModal: document.getElementById('cmpHintModal'),
+            count: document.getElementById('cmpCount'),
+            list: document.getElementById('cmpList'),
+            batch: document.getElementById('cmpBatchImportBtn'),
+            batchLabel: document.getElementById('cmpBatchBtnLabel'),
+            selectAllRow: document.getElementById('cmpSelectAllRow'),
+            selectAllToggle: document.getElementById('cmpSelectAllToggle'),
+            selectCount: document.getElementById('cmpSelectCount'),
+            clearSelectionBtn: document.getElementById('cmpClearSelectionBtn'),
+            searchClearBtn: document.getElementById('cmpSearchClear'),
+        };
+    }
+    function setBadge(state, customText) {
+        const r = getRefs();
+        const meta = MCP_STATE_LABELS[state] || MCP_STATE_LABELS.loading;
+        const text = (customText ? customText + ' · ' : '') + meta.text;
+        const cls = 'cmp-badge ' + meta.cls;
+        [r.badgeCompact, r.badgeModal].forEach(node => {
+            if (!node) return;
+            node.textContent = text;
+            node.className = cls;
+        });
+    }
+    function setHint(text) {
+        const r = getRefs();
+        const payload = text || '';
+        [r.hintCompact, r.hintModal].forEach(node => {
+            if (node) node.textContent = payload;
+        });
+    }
+    function setCount(n) {
+        const r = getRefs();
+        if (!r.count) return;
+        r.count.textContent = (typeof n === 'number' && n > 0) ? String(n) : '—';
+    }
+
+    // ---------- Filter / selection / list render ----------
+    function applyFilterToRows() {
+        const r = getRefs();
+        if (!r.list) return;
+        const term = STATE.filter;
+        const rows = Array.from(r.list.querySelectorAll('.cmp-item'));
+        let visible = 0;
+        rows.forEach(row => {
+            const name = (row.dataset.name || '').toLowerCase();
+            const title = (row.dataset.title || '').toLowerCase();
+            const hit = !term || name.includes(term) || title.includes(term);
+            row.classList.toggle('is-hidden', !hit);
+            if (hit) visible++;
+        });
+        let noMatch = r.list.querySelector('.cmp-no-match');
+        if (!visible && rows.length && term) {
+            if (!noMatch) {
+                noMatch = document.createElement('div');
+                noMatch.className = 'cmp-empty cmp-no-match';
+                noMatch.textContent = `没有匹配 “${term}” 的工作流`;
+                r.list.appendChild(noMatch);
+            } else {
+                noMatch.textContent = `没有匹配 “${term}” 的工作流`;
+                noMatch.classList.remove('is-hidden');
+            }
+        } else if (noMatch) {
+            noMatch.remove();
+        }
+    }
+
+    function updateSelectionUi() {
+        const r = getRefs();
+        if (!r.list) return;
+        const items = Array.from(r.list.querySelectorAll('.cmp-item'));
+        const visibleImportable = items.filter(el =>
+            el.dataset.canImport === 'true' && !el.classList.contains('is-hidden'));
+        const selectedInScope = visibleImportable.filter(el => STATE.selected.has(el.dataset.name)).length;
+        const totalSelected = STATE.selected.size;
+
+        // Per-row visual
+        items.forEach(row => {
+            const name = row.dataset.name;
+            const isSel = STATE.selected.has(name);
+            const chk = row.querySelector('.cmp-row-check');
+            if (chk) {
+                chk.classList.toggle('is-checked', isSel);
+                chk.setAttribute('aria-checked', isSel ? 'true' : 'false');
+            }
+        });
+
+        if (r.selectAllRow) {
+            const show = items.some(el => el.dataset.canImport === 'true');
+            r.selectAllRow.classList.toggle('is-hidden', !show);
+        }
+        if (r.selectAllToggle) {
+            const hasAny = visibleImportable.length > 0;
+            const allChecked = hasAny && selectedInScope === visibleImportable.length;
+            const someChecked = selectedInScope > 0 && selectedInScope < visibleImportable.length;
+            r.selectAllToggle.classList.toggle('is-checked', allChecked);
+            r.selectAllToggle.classList.toggle('is-indeterminate', someChecked);
+            r.selectAllToggle.setAttribute('aria-checked', allChecked ? 'true' : (someChecked ? 'mixed' : 'false'));
+        }
+        if (r.selectCount) {
+            r.selectCount.textContent = String(totalSelected);
+            r.selectCount.classList.toggle('is-active', totalSelected > 0);
+        }
+        if (r.clearSelectionBtn) {
+            r.clearSelectionBtn.classList.toggle('is-hidden', totalSelected === 0);
+        }
+        if (r.batch) {
+            const has = totalSelected > 0;
+            r.batch.disabled = !has;
+            r.batch.setAttribute('aria-disabled', has ? 'false' : 'true');
+        }
+        if (r.batchLabel) {
+            r.batchLabel.textContent = totalSelected > 0 ? `导入选中 (${totalSelected})` : '导入选中 (0)';
+        }
+    }
+
+    function toggleRow(name, selected) {
+        if (!name) return;
+        if (selected) STATE.selected.add(name);
+        else STATE.selected.delete(name);
+        updateSelectionUi();
+    }
+    function toggleSelectAll() {
+        const r = getRefs();
+        if (!r.list) return;
+        const rows = Array.from(r.list.querySelectorAll('.cmp-item'));
+        const visible = rows.filter(el =>
+            el.dataset.canImport === 'true' && !el.classList.contains('is-hidden'));
+        if (!visible.length) return;
+        const inScope = visible.map(el => el.dataset.name);
+        const allSelected = inScope.every(n => STATE.selected.has(n));
+        if (allSelected) inScope.forEach(n => STATE.selected.delete(n));
+        else inScope.forEach(n => STATE.selected.add(n));
+        updateSelectionUi();
+    }
+    function clearSelection() {
+        if (!STATE.selected.size) return;
+        STATE.selected.clear();
+        updateSelectionUi();
+    }
+    function onSearchInput(value) {
+        STATE.filter = String(value || '').trim().toLowerCase();
+        const r = getRefs();
+        if (r.searchClearBtn) r.searchClearBtn.classList.toggle('is-hidden', STATE.filter.length === 0);
+        applyFilterToRows();
+        updateSelectionUi();
+    }
+    function clearSearch() {
+        const r = getRefs();
+        const input = r.list?.parentElement?.querySelector('#cmpSearchInput');
+        if (input) input.value = '';
+        STATE.filter = '';
+        if (r.searchClearBtn) r.searchClearBtn.classList.add('is-hidden');
+        applyFilterToRows();
+        updateSelectionUi();
+    }
+
+    function renderList(items) {
+        const r = getRefs();
+        if (!r.list) return;
+        if (!items || !items.length) {
+            r.list.innerHTML = '<div class="cmp-empty">暂无工作流</div>';
+            STATE.items = [];
+            setCount(0);
+            updateSelectionUi();
+            return;
+        }
+        STATE.items = items;
+        setCount(items.length);
+
+        // Drop selections that no longer exist.
+        const existing = new Set(items.map(i => i.name));
+        if (!existing.size) STATE.selected.clear();
+        else Array.from(STATE.selected).forEach(n => { if (!existing.has(n)) STATE.selected.delete(n); });
+
+        r.list.innerHTML = items.map(item => {
+            const fmt = item.format || 'unknown';
+            const canImport = fmt === 'ui' || fmt === 'api';
+            const title = item.title || item.name;
+            const sizeKb = (item.size / 1024).toFixed(1);
+            const date = item.mtime ? new Date(item.mtime).toLocaleString() : '';
+            const errorTag = item.error
+                ? `<span class="cmp-error-tag" title="${escapeHtml(item.error)}">⚠ 解析失败</span>`
+                : '';
+            const safeName = String(item.name);
+            const checked = STATE.selected.has(safeName);
+            const dataAttrs =
+                `data-name="${escapeHtml(safeName)}" ` +
+                `data-title="${escapeHtml(title)}" ` +
+                `data-can-import="${canImport}" ` +
+                `data-selected="${checked ? 'true' : 'false'}"`;
+            const toggleAttr = `tabindex="0" role="checkbox" aria-checked="${checked}" aria-label="${escapeHtml(safeName)}"` +
+                (canImport ? '' : ' aria-disabled="true"');
+            const onToggle = canImport
+                ? `onclick="window.ComfyuiMcpPlugin._toggleRow('${escapeJs(safeName)}', ${checked ? 'false' : 'true'})"`
+                : '';
+            const checkDisabledCls = canImport ? '' : 'is-disabled';
+            const importOnclick = canImport
+                ? `onclick="window.ComfyuiMcpPlugin._importOne('${escapeJs(safeName)}', this)"`
+                : 'disabled';
+            return `
+            <div class="cmp-item" ${dataAttrs}>
+                <span class="cmp-row-check ${checked ? 'is-checked' : ''} ${checkDisabledCls}" ${toggleAttr} ${onToggle}></span>
+                <div class="cmp-item-meta">
+                    <div class="cmp-item-title" title="${escapeHtml(safeName)}">${escapeHtml(title)}</div>
+                    <div class="cmp-item-sub">[${fmt}] · ${sizeKb}KB · ${date}${errorTag ? ' · ' + errorTag : ''}</div>
+                </div>
+                <button class="upload-btn cmp-import-btn" type="button"
+                        ${importOnclick}
+                        title="${canImport ? '导入到工作流列表' : '格式无法识别，无法导入'}">
+                    <i data-lucide="download" class="w-3 h-3"></i><span>导入</span>
+                </button>
+            </div>`;
+        }).join('');
+        refreshIcons();
+        applyFilterToRows();
+        updateSelectionUi();
+    }
+
+    // ---------- Data fetches ----------
+    async function loadStatusAndList() {
+        // Avoid concurrent refresh storms from multiple Escape-clicked buttons.
+        if (STATE.refreshInflight) {
+            try { await STATE.refreshInflight; } catch (_) {}
+        }
+        setBadge('loading');
+        setHint('');
+        const r = getRefs();
+        if (r.list) r.list.innerHTML = '<div class="cmp-empty">加载中…</div>';
+        STATE.refreshInflight = (async () => {
+            try {
+                const [statusRes, listRes] = await Promise.all([
+                    fetch(API.status).then(x => x.json()),
+                    fetch(API.list).then(x => x.json()),
+                ]);
+                const matched = statusRes.matched_instance || '';
+                const fileCount = statusRes.file_count || 0;
+                setBadge(statusRes.state, matched ? `${matched} · ${fileCount} 个工作流` : null);
+                if (statusRes.state === 'mismatch') {
+                    const url = statusRes.comfyui_url || '?';
+                    const norm = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    setHint(`MCP 指向 ${norm}，但当前未配置为 ComfyUI 后端`);
+                } else if (statusRes.state === 'not_configured') {
+                    setHint(`未找到 MCP 配置文件：${statusRes.config_path || ''}`);
+                } else if (statusRes.state === 'dir_missing') {
+                    setHint(`工作流目录不存在：${statusRes.workflows_dir || ''}`);
+                } else if (statusRes.error) {
+                    setHint(`配置错误：${statusRes.error}`);
+                }
+                renderList(listRes.workflows || []);
+            } catch (_) {
+                setBadge('not_configured');
+                setHint('无法连接到本地服务');
+                const rr = getRefs();
+                if (rr.list) rr.list.innerHTML = '';
+                STATE.items = [];
+                updateSelectionUi();
+            }
+        })();
+        try { await STATE.refreshInflight; } finally { STATE.refreshInflight = null; }
+    }
+
+    async function importOne(name, btnEl) {
+        if (!name) return;
+        const originalHtml = btnEl.innerHTML;
+        btnEl.disabled = true;
+        btnEl.innerHTML = '<i data-lucide="loader" class="w-3 h-3"></i><span>导入中</span>';
+        refreshIcons();
+        try {
+            const res = await fetch(API.importOne(name), { method: 'POST' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+            toast(`已导入 ${data.name}`);
+            STATE.selected.delete(name);
+            await Promise.all([refreshHostList(), loadStatusAndList()]);
+        } catch (err) {
+            toast(`导入失败: ${err.message}`, true);
+            btnEl.disabled = false;
+            btnEl.innerHTML = originalHtml;
+            refreshIcons();
+        }
+    }
+
+    async function importMany() {
+        const names = STATE.items
+            .filter(it => (it.format === 'ui' || it.format === 'api') && STATE.selected.has(it.name))
+            .map(it => it.name);
+        if (!names.length) return;
+        const r = getRefs();
+        if (r.batch) r.batch.classList.add('is-running');
+        if (r.batchLabel) r.batchLabel.textContent = '导入中…';
+        if (r.batch) r.batch.disabled = true;
+        try {
+            const res = await fetch(API.importBatch, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ names }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+            const imported = data.imported ?? 0;
+            const results = data.results || [];
+            const failed = data.failed ?? results.filter(x => !x.ok).length;
+            const failedNames = results.filter(x => !x.ok).map(x => x.name);
+            if (imported && !failed) toast(`已导入 ${imported} 个工作流`);
+            else if (imported && failed) toast(`导入成功 ${imported} 个，失败 ${failed} 个`, true);
+            else if (failed) toast(
+                `导入失败：${failedNames.slice(0, 2).join('、')}${failedNames.length > 2 ? '…' : ''}`,
+                true
+            );
+            names.forEach(n => STATE.selected.delete(n));
+            await Promise.all([refreshHostList(), loadStatusAndList()]);
+        } catch (err) {
+            toast(`批量导入失败: ${err.message}`, true);
+            if (r.batchLabel) r.batchLabel.textContent = `导入选中 (${names.length})`;
+        } finally {
+            if (r.batch) {
+                r.batch.classList.remove('is-running');
+                r.batch.disabled = false;
+            }
+            updateSelectionUi();
+        }
+    }
+
+    // ---------- Modal lifecycle ----------
+    async function openModal() {
+        const modal = document.getElementById('cmpModal');
+        if (!modal || STATE.modalOpen) return;
+        STATE.prevFocus = document.activeElement;
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        STATE.modalOpen = true;
+        document.body.classList.add('cmp-modal-open');
+        const title = document.getElementById('cmpModalTitle');
+        if (title) {
+            title.setAttribute('tabindex', '-1');
+            title.focus({ preventScroll: true });
+        }
+        try {
+            await Promise.all([refreshHostList(), loadStatusAndList()]);
+        } catch (_) { /* errors already surfaced */ }
+    }
+    function closeModal() {
+        const modal = document.getElementById('cmpModal');
+        if (!modal || !STATE.modalOpen) return;
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        STATE.modalOpen = false;
+        document.body.classList.remove('cmp-modal-open');
+        if (STATE.prevFocus && typeof STATE.prevFocus.focus === 'function') {
+            STATE.prevFocus.focus({ preventScroll: true });
+        }
+        STATE.prevFocus = null;
+    }
+    function onGlobalKeydown(e) {
+        if (e.key === 'Escape' && STATE.modalOpen) {
+            e.preventDefault();
+            closeModal();
+        }
+    }
+
+    // ---------- Mount ----------
+    function mount() {
+        const mounts = document.querySelectorAll('[data-comfyui-mcp-mount]');
+        const triggers = document.querySelectorAll('[data-comfyui-mcp-trigger]');
+        if (!mounts.length && !triggers.length) return; // not on this page
+
+        // Each piece is wrapped in its own `.comfyui-mcp-root` so the
+        // scoped CSS rules apply without affecting host layout.
+        if (mounts.length) {
+            mounts[0].appendChild(wrapRoot(buildCompactCard()));
+        }
+        triggers.forEach(slot => slot.appendChild(wrapRoot(buildTriggerButton())));
+        // Modal is the only piece that goes to <body> directly — overlay
+        // positioning needs to escape any transformed/scrolled ancestors.
+        document.body.appendChild(wrapRoot(buildModal()));
+
+        refreshIcons();
+        document.addEventListener('keydown', onGlobalKeydown);
+        loadStatusAndList();
+    }
+
+    // ---------- Public API (used by inline onclick handlers and host code) ----------
+    window.ComfyuiMcpPlugin = {
+        openModal,
+        closeModal,
+        refresh: () => loadStatusAndList(),
+        // Internal helpers used by the inline onclick handlers we generate.
+        _toggleRow: toggleRow,
+        _importOne: importOne,
+    };
+
+    // ---------- Auto-mount ----------
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', mount, { once: true });
+    } else {
+        mount();
+    }
+})();
