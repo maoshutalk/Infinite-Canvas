@@ -57,6 +57,9 @@ def list_workflows(workflows_dir: Optional[Path]) -> Dict[str, Any]:
             continue
         if entry.suffix.lower() != ".json":
             continue
+        # Skip macOS AppleDouble metadata files (._Foo.json) created by Finder.
+        if entry.name.startswith("._"):
+            continue
         stat = entry.stat()
         item: Dict[str, Any] = {
             "name": entry.name,
@@ -92,8 +95,11 @@ def import_workflow(workflows_dir: Path, name: str) -> Dict[str, Any]:
     """Read a workflow file from MCP, convert if UI, write to WORKFLOW_DIR/custom/.
 
     Raises FileNotFoundError if name is not in workflows_dir.
-    Raises ValueError on invalid JSON or UI->API conversion failure.
+    Raises ValueError on invalid JSON, path traversal, or UI->API conversion failure.
     """
+    # Block macOS AppleDouble metadata files (._Foo.json) at the import boundary.
+    if name.startswith("._"):
+        raise ValueError(f"Mac metadata file not allowed: {name}")
     # Path-traversal defense: reject names that escape workflows_dir.
     src_path = (workflows_dir / name).resolve()
     workflows_dir_resolved = workflows_dir.resolve()
