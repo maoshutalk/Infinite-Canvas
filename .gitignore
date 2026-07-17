@@ -1,3 +1,13 @@
 
 ._!
 ._*
+
+.codebase-memory/
+.claude/
+API/.env
+data/
+docs/superpowers/
+workflows/custom/
+assets/output/
+assets/input/
+history.json
