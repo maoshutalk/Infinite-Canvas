@@ -52,6 +52,28 @@
         return Array.from(seen);
     }
 
+    function pageCount(total, size) {
+        return Math.max(1, Math.ceil((total || 0) / size));
+    }
+    function pageSlice(total, page, size) {
+        const pages = pageCount(total, size);
+        const p = Math.max(1, Math.min(page || 1, pages));
+        const start = (p - 1) * size;
+        return { start, end: Math.min(start + size, total), page: p, pages };
+    }
+    function windowedPages(current, total) {
+        const cur = Math.max(1, Math.min(current || 1, total));
+        if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+        const pages = new Set([1, total, cur, cur - 1, cur + 1, cur - 2, cur + 2]);
+        const sorted = Array.from(pages).filter(p => p >= 1 && p <= total).sort((a, b) => a - b);
+        const out = [];
+        for (let i = 0; i < sorted.length; i++) {
+            if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push('…');
+            out.push(sorted[i]);
+        }
+        return out;
+    }
+
     // ---------- Helpers ----------
     function escapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
