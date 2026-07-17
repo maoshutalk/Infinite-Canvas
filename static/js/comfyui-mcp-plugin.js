@@ -360,34 +360,7 @@
     }
 
     // ---------- Filter / selection / list render ----------
-    function applyFilterToRows() {
-        const r = getRefs();
-        if (!r.list) return;
-        const term = STATE.filter;
-        const rows = Array.from(r.list.querySelectorAll('.cmp-item'));
-        let visible = 0;
-        rows.forEach(row => {
-            const name = (row.dataset.name || '').toLowerCase();
-            const title = (row.dataset.title || '').toLowerCase();
-            const hit = !term || name.includes(term) || title.includes(term);
-            row.classList.toggle('is-hidden', !hit);
-            if (hit) visible++;
-        });
-        let noMatch = r.list.querySelector('.cmp-no-match');
-        if (!visible && rows.length && term) {
-            if (!noMatch) {
-                noMatch = document.createElement('div');
-                noMatch.className = 'cmp-empty cmp-no-match';
-                noMatch.textContent = `没有匹配 “${term}” 的工作流`;
-                r.list.appendChild(noMatch);
-            } else {
-                noMatch.textContent = `没有匹配 “${term}” 的工作流`;
-                noMatch.classList.remove('is-hidden');
-            }
-        } else if (noMatch) {
-            noMatch.remove();
-        }
-    }
+    // Filtering is handled inside renderList via computeFiltered + pageSlice.
 
     function computeFiltered(items, filter, exclude) {
         const term = (filter || '').trim().toLowerCase();
@@ -477,8 +450,7 @@
         STATE.filter = String(value || '').trim().toLowerCase();
         const r = getRefs();
         if (r.searchClearBtn) r.searchClearBtn.classList.toggle('is-hidden', STATE.filter.length === 0);
-        applyFilterToRows();
-        updateSelectionUi();
+        renderList(STATE.items);
     }
     function clearSearch() {
         const r = getRefs();
@@ -486,8 +458,7 @@
         if (input) input.value = '';
         STATE.filter = '';
         if (r.searchClearBtn) r.searchClearBtn.classList.add('is-hidden');
-        applyFilterToRows();
-        updateSelectionUi();
+        renderList(STATE.items);
     }
 
     function onExcludeInput(value) {
@@ -511,8 +482,10 @@
         const r = getRefs();
         if (!r.list) return;
         if (!items || !items.length) {
-            r.list.innerHTML = '<div class="cmp-empty">暂无工作流</div>';
             STATE.items = [];
+            STATE.page = 1;
+            r.list.innerHTML = '<div class="cmp-empty">暂无工作流</div>';
+            renderPagination(0, 1);
             setCount(0);
             updateSelectionUi();
             return;
@@ -524,7 +497,23 @@
         if (!existing.size) STATE.selected.clear();
         else Array.from(STATE.selected).forEach(n => { if (!existing.has(n)) STATE.selected.delete(n); });
 
-        r.list.innerHTML = items.map(item => {
+        const filtered = computeFiltered(items, STATE.filter, STATE.exclude);
+        const total = filtered.length;
+        const slice = pageSlice(total, STATE.page, STATE.pageSize);
+        STATE.page = slice.page;  // auto-clamp
+        const pageItems = filtered.slice(slice.start, slice.end);
+
+        if (total === 0) {
+            const reason = STATE.filter ? `没有匹配 “${STATE.filter}” 的工作流` :
+                           STATE.exclude.length ? '所有工作流都被排除词隐藏' :
+                           '暂无工作流';
+            r.list.innerHTML = `<div class="cmp-empty">${escapeHtml(reason)}</div>`;
+            renderPagination(0, 1);
+            updateSelectionUi();
+            return;
+        }
+
+        r.list.innerHTML = pageItems.map(item => {
             const fmt = item.format || 'unknown';
             const canImport = fmt === 'ui' || fmt === 'api';
             const title = item.title || item.name;
@@ -560,7 +549,7 @@
             </div>`;
         }).join('');
         refreshIcons();
-        applyFilterToRows();
+        renderPagination(total, slice.page);
         updateSelectionUi();
     }
 
