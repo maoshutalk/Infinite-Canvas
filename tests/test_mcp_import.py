@@ -1,6 +1,11 @@
+import json
 import os
+import platform
 import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 # Make mcp_io package importable when running tests from project root
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -126,6 +131,79 @@ class UiToApiTests(unittest.TestCase):
         }
         out = ui_to_api(wf)
         self.assertEqual(out, {"1": {"class_type": "X", "inputs": {}}})
+
+
+# =====================================================================
+# Task 2 — mcp_config
+# =====================================================================
+
+from mcp_io.mcp_config import Config, load_config, match_instance, resolve_config_path
+
+
+class ResolveConfigPathTests(unittest.TestCase):
+    def test_darwin_path(self):
+        with patch.object(platform, "system", return_value="Darwin"):
+            self.assertEqual(
+                resolve_config_path(),
+                Path.home() / "Library" / "Application Support" / "comfyui-mcp" / "config.json",
+            )
+
+    def test_windows_path(self):
+        with patch.dict(os.environ, {"APPDATA": "C:/Users/x/AppData/Roaming"}, clear=False):
+            with patch.object(platform, "system", return_value="Windows"):
+                self.assertEqual(
+                    resolve_config_path(),
+                    Path("C:/Users/x/AppData/Roaming") / "comfyui-mcp" / "config.json",
+                )
+
+    def test_linux_path(self):
+        with patch.object(platform, "system", return_value="Linux"):
+            self.assertEqual(
+                resolve_config_path(),
+                Path.home() / ".config" / "comfyui-mcp" / "config.json",
+            )
+
+
+class LoadConfigTests(unittest.TestCase):
+    def test_missing_file(self):
+        cfg = load_config(Path("/nonexistent/config.json"))
+        self.assertFalse(cfg.exists)
+        self.assertEqual(cfg.path, Path("/nonexistent/config.json"))
+        self.assertIsNone(cfg.workflows_dir)
+        self.assertIsNone(cfg.comfyui_url)
+        self.assertEqual(cfg.comfyui_url_default, "http://127.0.0.1:8188")
+
+    def test_valid_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "config.json"
+            p.write_text(json.dumps({
+                "comfyui": {"url": "http://192.168.40.12:8188"},
+                "workflowsDir": "/Users/jin/wf",
+            }))
+            cfg = load_config(p)
+            self.assertTrue(cfg.exists)
+            self.assertEqual(cfg.comfyui_url, "http://192.168.40.12:8188")
+            self.assertEqual(cfg.workflows_dir, Path("/Users/jin/wf"))
+
+    def test_invalid_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "config.json"
+            p.write_text("not json {{{")
+            cfg = load_config(p)
+            self.assertTrue(cfg.exists)
+            self.assertIsNotNone(cfg.error)
+            self.assertEqual(cfg.comfyui_url, "http://127.0.0.1:8188")  # default
+
+
+class MatchInstanceTests(unittest.TestCase):
+    def test_exact_match(self):
+        self.assertEqual(match_instance("http://192.168.40.12:8188", ["192.168.40.12:8188"]), "192.168.40.12:8188")
+
+    def test_match_strips_scheme(self):
+        self.assertEqual(match_instance("https://192.168.40.12:8188/", ["192.168.40.12:8188"]), "192.168.40.12:8188")
+
+    def test_no_match(self):
+        self.assertIsNone(match_instance("http://127.0.0.1:8188", ["192.168.40.12:8188"]))
 
 
 if __name__ == "__main__":
