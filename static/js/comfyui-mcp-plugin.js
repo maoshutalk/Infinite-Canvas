@@ -19,11 +19,15 @@
     // ---------- State ----------
     const STATE = {
         items: [],                  // latest list from /api/mcp/workflows
-        selected: new Set(),        // checked workflow names
+        selected: new Set(),        // checked workflow names (cross-page)
         filter: '',                 // search filter (lowercased)
+        exclude: [],                // exclude keywords (lowercased, deduped)
+        page: 1,                    // current page (1-based)
+        pageSize: 10,               // items per page
         modalOpen: false,
         prevFocus: null,
         refreshInflight: null,
+        lastFetchedAt: null,        // Date of last successful refresh
     };
 
     const MCP_STATE_LABELS = {
@@ -225,6 +229,26 @@
             }, [el('i', { dataset: { lucide: 'x' }, class: 'w-3 h-3' })]),
         ]);
 
+        const excludeRow = el('div', { class: 'cmp-search cmp-exclude' }, [
+            el('i', { dataset: { lucide: 'filter-x' }, class: 'w-3 h-3 cmp-search-icon' }),
+            el('input', {
+                id: 'cmpExcludeInput',
+                type: 'search',
+                placeholder: '排除关键词（空格分隔，如 archived test）',
+                autocomplete: 'off',
+                spellcheck: false,
+                oninput: (e) => onExcludeInput(e.target.value),
+            }),
+            el('button', {
+                id: 'cmpExcludeClear',
+                type: 'button',
+                class: 'cmp-search-clear is-hidden',
+                ariaLabel: '清空排除',
+                title: '清空排除',
+                onclick: clearExclude,
+            }, [el('i', { dataset: { lucide: 'x' }, class: 'w-3 h-3' })]),
+        ]);
+
         const selectAllRow = el('div', { id: 'cmpSelectAllRow', class: 'cmp-select-all is-hidden' }, [
             el('span', {
                 id: 'cmpSelectAllToggle',
@@ -253,7 +277,7 @@
             el('span', { id: 'cmpSelectCount', class: 'cmp-select-count', textContent: '0' }),
         ]);
 
-        const toolbar = el('div', { class: 'cmp-modal-toolbar' }, [selectAllRow, searchRow]);
+        const toolbar = el('div', { class: 'cmp-modal-toolbar' }, [selectAllRow, searchRow, excludeRow]);
         const list = el('div', { id: 'cmpList', class: 'cmp-list' });
 
         const body = el('div', { class: 'cmp-modal-body' }, [toolbar, list]);
@@ -305,6 +329,9 @@
             selectCount: document.getElementById('cmpSelectCount'),
             clearSelectionBtn: document.getElementById('cmpClearSelectionBtn'),
             searchClearBtn: document.getElementById('cmpSearchClear'),
+            excludeInput: document.getElementById('cmpExcludeInput'),
+            excludeClearBtn: document.getElementById('cmpExcludeClear'),
+            lastFetched: document.getElementById('cmpLastFetched'),
         };
     }
     function setBadge(state, customText) {
@@ -460,6 +487,23 @@
         if (r.searchClearBtn) r.searchClearBtn.classList.add('is-hidden');
         applyFilterToRows();
         updateSelectionUi();
+    }
+
+    function onExcludeInput(value) {
+        STATE.exclude = parseExclude(value);
+        const r = getRefs();
+        if (r.excludeClearBtn) r.excludeClearBtn.classList.toggle('is-hidden', STATE.exclude.length === 0);
+        STATE.page = 1;  // reset to first page on filter change
+        renderList();
+    }
+    function clearExclude() {
+        const r = getRefs();
+        const input = document.getElementById('cmpExcludeInput');
+        if (input) input.value = '';
+        STATE.exclude = [];
+        if (r.excludeClearBtn) r.excludeClearBtn.classList.add('is-hidden');
+        STATE.page = 1;
+        renderList();
     }
 
     function renderList(items) {

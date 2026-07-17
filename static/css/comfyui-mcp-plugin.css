@@ -36,6 +36,10 @@ body.studio-theme-dark .comfyui-mcp-root .cmp-search:focus-within { border-color
 .comfyui-mcp-root .cmp-search-clear { background:transparent; border:0; padding:2px 4px; border-radius:5px; color:var(--faint); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color .15s ease, background .15s ease; flex:0 0 auto; }
 .comfyui-mcp-root .cmp-search-clear:hover { color:var(--text); background:var(--soft); }
 .comfyui-mcp-root .cmp-search-clear.is-hidden { display:none; }
+.comfyui-mcp-root .cmp-exclude { margin-top:-2px; }
+.comfyui-mcp-root .cmp-exclude input { color:var(--text); }
+.comfyui-mcp-root .cmp-exclude input::placeholder { font-style:italic; }
+.comfyui-mcp-root .cmp-last-fetched { font-size:10px; font-weight:700; color:var(--faint); margin-left:auto; }
 
 /* ---------- Select-all / clear selection row ---------- */
 .comfyui-mcp-root .cmp-select-all { display:flex; align-items:center; gap:8px; padding:6px 2px 4px; font-size:10.5px; color:var(--muted); font-weight:700; user-select:none; }
