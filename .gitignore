@@ -8,6 +8,7 @@ workflows/custom/
 assets/output/
 assets/input/
 history.json
+__pycache__/
 
 
 ._!
