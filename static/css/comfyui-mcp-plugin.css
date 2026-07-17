@@ -173,3 +173,44 @@ body.cmp-confirm-open { overflow:hidden; }
     }
     .comfyui-mcp-root .cmp-modal-panel { transform: none; }
 }
+
+/* ---------- Pagination ---------- */
+.comfyui-mcp-root .cmp-pagination {
+    display:flex; align-items:center; gap:4px; padding:8px 4px 2px;
+    flex-wrap:wrap;
+}
+.comfyui-mcp-root .cmp-pagination.is-hidden { display:none; }
+.comfyui-mcp-root .cmp-page-btn {
+    min-width:32px; height:32px; padding:0 8px;
+    border:1px solid var(--line); border-radius:8px;
+    background:var(--panel); color:var(--text);
+    font-size:12px; font-weight:850;
+    cursor:pointer;
+    transition:background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;
+    font-variant-numeric:tabular-nums;
+}
+.comfyui-mcp-root .cmp-page-btn:hover:not(:disabled) {
+    background:var(--soft); border-color:var(--text);
+}
+.comfyui-mcp-root .cmp-page-btn:focus-visible {
+    outline:2px solid var(--accent); outline-offset:1px;
+}
+.comfyui-mcp-root .cmp-page-btn:active:not(:disabled) { transform:scale(.96); }
+.comfyui-mcp-root .cmp-page-btn.is-current {
+    background:var(--accent); border-color:var(--accent); color:var(--bg);
+}
+.comfyui-mcp-root .cmp-page-btn.is-disabled,
+.comfyui-mcp-root .cmp-page-btn:disabled {
+    opacity:.35; cursor:not-allowed;
+}
+.comfyui-mcp-root .cmp-page-edge { font-weight:900; }
+.comfyui-mcp-root .cmp-page-ellipsis {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:24px; height:32px;
+    color:var(--faint); font-weight:850; font-size:12px;
+    user-select:none;
+}
+.comfyui-mcp-root .cmp-page-status {
+    margin-left:auto; font-size:11px; font-weight:700; color:var(--faint);
+    font-variant-numeric:tabular-nums;
+}

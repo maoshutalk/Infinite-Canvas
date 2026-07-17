@@ -280,7 +280,8 @@
         const toolbar = el('div', { class: 'cmp-modal-toolbar' }, [selectAllRow, searchRow, excludeRow]);
         const list = el('div', { id: 'cmpList', class: 'cmp-list' });
 
-        const body = el('div', { class: 'cmp-modal-body' }, [toolbar, list]);
+        const pagination = el('div', { id: 'cmpPagination', class: 'cmp-pagination is-hidden' });
+        const body = el('div', { class: 'cmp-modal-body' }, [toolbar, list, pagination]);
 
         const footer = el('footer', { class: 'cmp-modal-footer' }, [
             el('div', { class: 'cmp-modal-footer-info' }, [
@@ -563,6 +564,37 @@
         updateSelectionUi();
     }
 
+    function renderPagination(filteredTotal, pageInfo) {
+        const bar = document.getElementById('cmpPagination');
+        if (!bar) return;
+        if (filteredTotal === 0) {
+            bar.innerHTML = '';
+            bar.classList.add('is-hidden');
+            return;
+        }
+        bar.classList.remove('is-hidden');
+        const { page, pages } = pageSlice(filteredTotal, STATE.page, STATE.pageSize);
+        const labels = windowedPages(page, pages);
+        const btn = (label, target, opts = {}) => {
+            const cls = ['cmp-page-btn'];
+            if (opts.current) cls.push('is-current');
+            if (opts.disabled) cls.push('is-disabled');
+            if (opts.edge) cls.push('cmp-page-edge');
+            return `<button type="button" class="${cls.join(' ')}" data-page="${target}" ${opts.disabled ? 'disabled aria-disabled="true"' : ''} aria-label="${escapeHtml(opts.aria || String(label))}">${escapeHtml(String(label))}</button>`;
+        };
+        const parts = [];
+        parts.push(btn('«', 1, { edge: true, disabled: page === 1, aria: '首页' }));
+        parts.push(btn('‹', page - 1, { edge: true, disabled: page === 1, aria: '上一页' }));
+        labels.forEach(l => {
+            if (l === '…') parts.push('<span class="cmp-page-ellipsis" aria-hidden="true">…</span>');
+            else parts.push(btn(l, l, { current: l === page, aria: `第 ${l} 页` }));
+        });
+        parts.push(btn('›', page + 1, { edge: true, disabled: page === pages, aria: '下一页' }));
+        parts.push(btn('»', pages, { edge: true, disabled: page === pages, aria: '末页' }));
+        parts.push(`<span class="cmp-page-status">共 ${filteredTotal} 项 · 第 ${page}/${pages} 页</span>`);
+        bar.innerHTML = parts.join('');
+    }
+
     // ---------- Data fetches ----------
     async function loadStatusAndList() {
         // Avoid concurrent refresh storms from multiple Escape-clicked buttons.
@@ -749,6 +781,28 @@
                 const name = row ? row.dataset.name : null;
                 if (!name) return;
                 toggleRow(name, !STATE.selected.has(name));
+            });
+        }
+
+        // Pagination click delegation
+        const paginationEl = document.getElementById('cmpPagination');
+        if (paginationEl) {
+            paginationEl.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-page]');
+                if (!btn || btn.disabled) return;
+                const target = btn.dataset.page;
+                const cur = STATE.page;
+                let next = cur;
+                if (target === 'first') next = 1;
+                else if (target === 'last') next = pageCount(computeFiltered(STATE.items, STATE.filter, STATE.exclude).length, STATE.pageSize);
+                else next = Number(target);
+                if (!Number.isFinite(next) || next < 1) return;
+                if (next !== cur) {
+                    STATE.page = next;
+                    renderList();
+                    const listEl = document.getElementById('cmpList');
+                    if (listEl) listEl.scrollTop = 0;
+                }
             });
         }
 
