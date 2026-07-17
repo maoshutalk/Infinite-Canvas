@@ -38,9 +38,10 @@
         dir_missing:    { text: '工作流目录不存在',     cls: 'cmp-state-unset' },
     };
 
+    const cacheBust = () => `?_=${Date.now()}`;
     const API = {
-        status: '/api/mcp/status',
-        list:   '/api/mcp/workflows',
+        status: () => `/api/mcp/status${cacheBust()}`,
+        list:   () => `/api/mcp/workflows${cacheBust()}`,
         importOne:  (name) => `/api/mcp/workflows/${encodeURIComponent(name)}/import`,
         importBatch:'/api/mcp/workflows/import-batch',
     };
@@ -206,6 +207,7 @@
             el('div', { class: 'cmp-modal-status-row' }, [
                 el('div', { id: 'cmpBadgeModal', class: 'cmp-badge cmp-state-loading', textContent: '检测中…' }),
                 el('span', { id: 'cmpHintModal', class: 'cmp-hint' }),
+                el('span', { id: 'cmpLastFetched', class: 'cmp-last-fetched' }),
             ]),
         ]);
 
@@ -357,6 +359,13 @@
         const r = getRefs();
         if (!r.count) return;
         r.count.textContent = (typeof n === 'number' && n > 0) ? String(n) : '—';
+    }
+    function setLastFetched(date) {
+        const r = getRefs();
+        if (!r.lastFetched) return;
+        if (!date) { r.lastFetched.textContent = ''; return; }
+        const pad = (n) => String(n).padStart(2, '0');
+        r.lastFetched.textContent = ` · 最后更新 ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     }
 
     // ---------- Filter / selection / list render ----------
@@ -597,8 +606,8 @@
         STATE.refreshInflight = (async () => {
             try {
                 const [statusRes, listRes] = await Promise.all([
-                    fetch(API.status).then(x => x.json()),
-                    fetch(API.list).then(x => x.json()),
+                    fetch(API.status()).then(x => x.json()),
+                    fetch(API.list()).then(x => x.json()),
                 ]);
                 const matched = statusRes.matched_instance || '';
                 const fileCount = statusRes.file_count || 0;
@@ -621,9 +630,12 @@
                     setHint(`配置错误：${statusRes.error}`);
                 }
                 renderList(listRes.workflows || []);
+                STATE.lastFetchedAt = new Date();
+                setLastFetched(STATE.lastFetchedAt);
             } catch (_) {
                 setBadge('not_configured');
                 setHint('无法连接到本地服务');
+                setLastFetched(null);
                 const rr = getRefs();
                 if (rr.list) rr.list.innerHTML = '';
                 STATE.items = [];
