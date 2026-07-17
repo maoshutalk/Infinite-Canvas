@@ -631,9 +631,8 @@
 
         // Each piece is wrapped in its own `.comfyui-mcp-root` so the
         // scoped CSS rules apply without affecting host layout.
-        if (mounts.length) {
-            mounts[0].appendChild(wrapRoot(buildCompactCard()));
-        }
+        // The compact sidebar card is intentionally NOT rendered — the
+        // 工作流列表 footer button is the only entry point to the modal.
         triggers.forEach(slot => slot.appendChild(wrapRoot(buildTriggerButton())));
         // Modal is the only piece that goes to <body> directly — overlay
         // positioning needs to escape any transformed/scrolled ancestors.
@@ -668,11 +667,123 @@
         loadStatusAndList();
     }
 
+    // ---------- Generic confirm modal (shared with host) ----------
+    // Promise-based replacement for window.confirm. Resolves true (OK) or false (Cancel/ESC/backdrop).
+    //   { title, message, confirmText, cancelText, danger, icon, okLabel }
+    // `danger: true` → red confirm button. `icon` is a Lucide icon name (default 'alert-triangle').
+    function confirmAction(opts = {}) {
+        return new Promise((resolve) => {
+            const cfg = {
+                title: opts.title || '确认操作',
+                message: opts.message || '',
+                confirmText: opts.confirmText || '确认',
+                cancelText: opts.cancelText || '取消',
+                danger: !!opts.danger,
+                icon: opts.icon || 'alert-triangle',
+            };
+            const prevFocus = document.activeElement;
+
+            // Build DOM
+            const root = document.createElement('div');
+            root.className = 'comfyui-mcp-root';
+            const wrap = document.createElement('div');
+            wrap.className = 'cmp-confirm';
+            wrap.setAttribute('role', 'dialog');
+            wrap.setAttribute('aria-modal', 'true');
+            wrap.setAttribute('aria-labelledby', 'cmpConfirmTitle');
+            const panel = document.createElement('div');
+            panel.className = 'cmp-confirm-panel';
+            panel.setAttribute('role', 'document');
+            const backdrop = document.createElement('div');
+            backdrop.className = 'cmp-confirm-backdrop';
+            const body = document.createElement('div');
+            body.className = 'cmp-confirm-body';
+            const icon = document.createElement('div');
+            icon.className = 'cmp-confirm-icon' + (cfg.danger ? '' : ' is-neutral');
+            const iconI = document.createElement('i');
+            iconI.setAttribute('data-lucide', cfg.icon);
+            iconI.className = 'w-4 h-4';
+            icon.appendChild(iconI);
+            const title = document.createElement('div');
+            title.id = 'cmpConfirmTitle';
+            title.className = 'cmp-confirm-title';
+            title.textContent = cfg.title;
+            const msg = document.createElement('div');
+            msg.className = 'cmp-confirm-msg';
+            // message is HTML (host can pass `<b>...</b>` for emphasis)
+            msg.innerHTML = cfg.message;
+            body.append(icon, title, msg);
+
+            const footer = document.createElement('div');
+            footer.className = 'cmp-confirm-footer';
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'cmp-confirm-btn';
+            cancelBtn.dataset.confirmAct = 'cancel';
+            cancelBtn.textContent = cfg.cancelText;
+            const okBtn = document.createElement('button');
+            okBtn.type = 'button';
+            okBtn.className = 'cmp-confirm-btn ' + (cfg.danger ? 'is-danger' : 'is-primary');
+            okBtn.dataset.confirmAct = 'ok';
+            okBtn.textContent = cfg.confirmText;
+            footer.append(cancelBtn, okBtn);
+
+            panel.append(body, footer);
+            wrap.append(backdrop, panel);
+            root.appendChild(wrap);
+            document.body.appendChild(root);
+            document.body.classList.add('cmp-confirm-open');
+            if (window.lucide) window.lucide.createIcons();
+
+            // open on next frame so transition runs
+            requestAnimationFrame(() => wrap.classList.add('is-open'));
+
+            let closing = false;
+            const onKey = (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); finish(false); return; }
+                if (e.key === 'Enter' && document.activeElement === okBtn) {
+                    e.preventDefault(); finish(true);
+                }
+            };
+            document.addEventListener('keydown', onKey);
+
+            const finish = (val) => {
+                if (closing) return;
+                closing = true;
+                document.removeEventListener('keydown', onKey);
+                wrap.classList.remove('is-open');
+                setTimeout(() => {
+                    root.remove();
+                    document.body.classList.remove('cmp-confirm-open');
+                    if (prevFocus && typeof prevFocus.focus === 'function') {
+                        try { prevFocus.focus(); } catch (_) {}
+                    }
+                    resolve(val);
+                }, 180);
+            };
+
+            wrap.addEventListener('click', (e) => {
+                const act = e.target.closest('[data-confirm-act]');
+                if (!act) {
+                    // click on backdrop area outside panel → cancel
+                    if (e.target === backdrop) finish(false);
+                    return;
+                }
+                finish(act.dataset.confirmAct === 'ok');
+            });
+
+            // Focus the OK button (Enter activates it via keydown handler).
+            setTimeout(() => { okBtn.focus(); }, 30);
+        });
+    }
+
     // ---------- Public API (used by inline onclick handlers and host code) ----------
     window.ComfyuiMcpPlugin = {
         openModal,
         closeModal,
         refresh: () => loadStatusAndList(),
+        // Replaces window.confirm — Promise-based, non-blocking custom modal.
+        confirm: confirmAction,
         // Internal helpers used by the inline onclick handlers we generate.
         _toggleRow: toggleRow,
         _importOne: importOne,

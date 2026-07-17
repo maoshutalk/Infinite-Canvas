@@ -288,7 +288,7 @@ function renderList(){
                 <span class="workflow-icon"><i data-lucide="${w.builtin?'package':'file-json-2'}" class="w-3.5 h-3.5"></i></span>
                 <span class="min-w-0" style="flex:1">
                     <div class="workflow-name">${escapeHtml(w.title)}</div>
-                    <div class="workflow-meta">${tf('comfy.fieldCount', {count:w.field_count})}</div>
+                    <div class="workflow-meta${w.field_count===0?' is-zero':''}">${tf('comfy.fieldCount', {count:w.field_count})}</div>
                 </span>
                 ${builtinBadge}
             </button>
@@ -301,7 +301,17 @@ function renderList(){
 async function deleteWorkflowItem(name, title, btnEl) {
     if (!name) return;
     const displayName = title || name;
-    if (!window.confirm(`确定要删除工作流 "${displayName}" 吗？此操作不可撤销。`)) return;
+    const ok = await (window.ComfyuiMcpPlugin?.confirm
+        ? window.ComfyuiMcpPlugin.confirm({
+            title: '删除工作流',
+            message: `确定要删除 <b>${escapeHtml(displayName)}</b> 吗？此操作不可撤销。`,
+            confirmText: '删除',
+            cancelText: '取消',
+            danger: true,
+            icon: 'trash-2',
+        })
+        : Promise.resolve(window.confirm(`确定要删除工作流 "${displayName}" 吗？此操作不可撤销。`)));
+    if (!ok) return;
     if (btnEl) btnEl.disabled = true;
     try {
         const res = await fetch(`/api/workflows/${encodeURIComponent(name)}`, { method: 'DELETE' });
@@ -317,11 +327,11 @@ async function deleteWorkflowItem(name, title, btnEl) {
             renderPreview();
             renderWorkspaceView();
         }
-        showToast?.(`已删除 ${displayName}`);
+        if (window.showToast) window.showToast(`已删除 ${displayName}`);
         await loadList();
         try { new BroadcastChannel('studio-api').postMessage({ type: 'workflows-changed' }); } catch(e) {}
     } catch (err) {
-        showToast?.(`删除失败: ${err.message}`, true);
+        if (window.showToast) window.showToast(`删除失败: ${err.message}`, true);
         if (btnEl) btnEl.disabled = false;
     }
 }
@@ -1712,7 +1722,7 @@ async function importMcpWorkflow(name, btnEl) {
         if (!res.ok) {
             throw new Error(data.detail || `HTTP ${res.status}`);
         }
-        showToast?.(`已导入 ${data.name}`);
+        if (window.showToast) window.showToast(`已导入 ${data.name}`);
         mcpSelectedNames.delete(name);
         // Refresh in parallel — main list + MCP list. Promise.all halves
         // the time the page can feel unresponsive on slow connections.
@@ -1721,7 +1731,7 @@ async function importMcpWorkflow(name, btnEl) {
             loadMcpStatusAndList(),
         ]);
     } catch (err) {
-        showToast?.(`导入失败: ${err.message}`, true);
+        if (window.showToast) window.showToast(`导入失败: ${err.message}`, true);
         btnEl.disabled = false;
         btnEl.innerHTML = originalHtml;
         if (window.lucide) window.lucide.createIcons();
@@ -1754,11 +1764,11 @@ async function importMcpWorkflows() {
         const failedNames = (data.results || []).filter(r => !r.ok).map(r => r.name);
 
         if (imported && failed === 0) {
-            showToast?.(`已导入 ${imported} 个工作流`);
+            if (window.showToast) window.showToast(`已导入 ${imported} 个工作流`);
         } else if (imported && failed) {
-            showToast?.(`导入成功 ${imported} 个，失败 ${failed} 个`, true);
+            if (window.showToast) window.showToast(`导入成功 ${imported} 个，失败 ${failed} 个`, true);
         } else if (failed) {
-            showToast?.(`导入失败：${failedNames.slice(0, 2).join("、")}${failedNames.length > 2 ? "…" : ""}`, true);
+            if (window.showToast) window.showToast(`导入失败：${failedNames.slice(0, 2).join("、")}${failedNames.length > 2 ? "…" : ""}`, true);
         }
 
         // Drop selections regardless of success — the imported copies live in
@@ -1769,7 +1779,7 @@ async function importMcpWorkflows() {
             loadMcpStatusAndList(),
         ]);
     } catch (err) {
-        showToast?.(`批量导入失败: ${err.message}`, true);
+        if (window.showToast) window.showToast(`批量导入失败: ${err.message}`, true);
         if (batchLbl) batchLbl.textContent = `导入选中 (${names.length})`;
     } finally {
         if (batchBtn) {
