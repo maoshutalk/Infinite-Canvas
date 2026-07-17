@@ -1,0 +1,139 @@
+/*
+ * comfyui-mcp-plugin.css — styles for the ComfyUI MCP import plugin.
+ *
+ * All rules are scoped under `.comfyui-mcp-root` so the plugin can be
+ * loaded into any page without colliding with host styles. The plugin
+ * itself is mounted by `comfyui-mcp-plugin.js`, which builds these
+ * elements; this file only contains the visual rules.
+ */
+
+/* ---------- Compact sidebar card ---------- */
+.comfyui-mcp-root { display:contents; }
+.comfyui-mcp-root .cmp-card { display:flex; flex-direction:column; gap:8px; }
+.comfyui-mcp-root .cmp-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.comfyui-mcp-root .cmp-title { font-size:11px; font-weight:800; color:var(--muted); padding:0; }
+.comfyui-mcp-root .cmp-count { font-size:10.5px; font-weight:900; color:var(--muted); padding:2px 8px; border-radius:999px; background:var(--soft); border:1px solid var(--line); font-variant-numeric:tabular-nums; line-height:1.2; }
+.comfyui-mcp-root .cmp-status-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.comfyui-mcp-root .cmp-open-btn { flex:1; min-width:0; height:30px; padding:0 10px !important; font-size:11px !important; font-weight:800 !important; gap:6px; }
+.comfyui-mcp-root .cmp-open-btn i { flex:0 0 auto; }
+.comfyui-mcp-root .cmp-hint { font-size:10px; font-weight:600; color:var(--faint); line-height:1.45; min-height:14px; word-break:break-all; }
+
+/* ---------- Status badge (used in compact card AND modal header) ---------- */
+.comfyui-mcp-root .cmp-badge { font-size:10.5px; font-weight:800; letter-spacing:.04em; padding:4px 10px; border-radius:6px; width:fit-content; background:var(--soft); color:var(--muted); line-height:1.3; }
+.comfyui-mcp-root .cmp-state-loading { color:var(--muted); }
+.comfyui-mcp-root .cmp-state-connected { color:#15803d; background:rgba(34,197,94,.13); }
+body.studio-theme-dark .comfyui-mcp-root .cmp-state-connected { color:#86efac; background:rgba(34,197,94,.2); }
+.comfyui-mcp-root .cmp-state-mismatch { color:#b45309; background:rgba(245,158,11,.16); }
+body.studio-theme-dark .comfyui-mcp-root .cmp-state-mismatch { color:#fbbf24; background:rgba(245,158,11,.22); }
+.comfyui-mcp-root .cmp-state-unset { color:var(--faint); }
+
+/* ---------- Search row inside modal ---------- */
+.comfyui-mcp-root .cmp-search { position:relative; display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:9px; background:var(--panel); transition:border-color .15s ease, background .15s ease; }
+.comfyui-mcp-root .cmp-search:focus-within { border-color:var(--text); background:var(--panel); }
+body.studio-theme-dark .comfyui-mcp-root .cmp-search:focus-within { border-color:#f5f6f8; }
+.comfyui-mcp-root .cmp-search-icon { color:var(--faint); flex:0 0 auto; }
+.comfyui-mcp-root .cmp-search input { flex:1; min-width:0; border:0; background:transparent; color:var(--text); font-size:11.5px; font-weight:600; outline:none; padding:2px 0; -webkit-appearance:none; appearance:none; }
+.comfyui-mcp-root .cmp-search input::placeholder { color:var(--faint); font-weight:600; }
+.comfyui-mcp-root .cmp-search input::-webkit-search-cancel-button { display:none; }
+.comfyui-mcp-root .cmp-search-clear { background:transparent; border:0; padding:2px 4px; border-radius:5px; color:var(--faint); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color .15s ease, background .15s ease; flex:0 0 auto; }
+.comfyui-mcp-root .cmp-search-clear:hover { color:var(--text); background:var(--soft); }
+.comfyui-mcp-root .cmp-search-clear.is-hidden { display:none; }
+
+/* ---------- Select-all / clear selection row ---------- */
+.comfyui-mcp-root .cmp-select-all { display:flex; align-items:center; gap:8px; padding:6px 2px 4px; font-size:10.5px; color:var(--muted); font-weight:700; user-select:none; }
+.comfyui-mcp-root .cmp-select-all .cmp-row-check { width:16px; height:16px; }
+.comfyui-mcp-root .cmp-select-all-label { cursor:pointer; }
+.comfyui-mcp-root .cmp-clear-selection { background:transparent; border:0; color:var(--faint); font-size:10px; font-weight:800; cursor:pointer; padding:2px 4px; border-radius:5px; transition:color .15s ease, background .15s ease; }
+.comfyui-mcp-root .cmp-clear-selection:hover { color:#dc2626; background:rgba(220,38,38,.08); }
+body.studio-theme-dark .comfyui-mcp-root .cmp-clear-selection:hover { color:#fca5a5; background:rgba(127,29,29,.22); }
+.comfyui-mcp-root .cmp-clear-selection.is-hidden { display:none; }
+.comfyui-mcp-root .cmp-select-count { margin-left:auto; padding:1px 8px; border-radius:999px; background:var(--soft); color:var(--muted); font-size:10px; font-weight:900; font-variant-numeric:tabular-nums; transition:all .15s ease; }
+.comfyui-mcp-root .cmp-select-count.is-active { background:var(--accent); color:var(--bg); }
+body.studio-theme-dark .comfyui-mcp-root .cmp-select-count.is-active { background:#f5f6f8; color:#0e1014; }
+.comfyui-mcp-root .cmp-select-all.is-hidden { display:none; }
+
+/* ---------- Per-row checkbox ---------- */
+.comfyui-mcp-root .cmp-row-check { width:16px; height:16px; min-width:16px; min-height:16px; border:1.5px solid var(--line-strong); border-radius:5px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s ease, border-color .15s ease; background:var(--panel); color:var(--bg); flex:0 0 auto; position:relative; }
+body.studio-theme-dark .comfyui-mcp-root .cmp-row-check { background:transparent; }
+.comfyui-mcp-root .cmp-row-check:hover { border-color:var(--text); }
+.comfyui-mcp-root .cmp-row-check:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.comfyui-mcp-root .cmp-row-check.is-checked { background:var(--accent); border-color:var(--accent); }
+body.studio-theme-dark .comfyui-mcp-root .cmp-row-check.is-checked { background:#f5f6f8; border-color:#f5f6f8; color:#0e1014; }
+.comfyui-mcp-root .cmp-row-check.is-checked::after { content:""; width:9px; height:5px; border-left:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg) translate(1px,-1px); }
+.comfyui-mcp-root .cmp-row-check.is-indeterminate { background:var(--accent); border-color:var(--accent); }
+body.studio-theme-dark .comfyui-mcp-root .cmp-row-check.is-indeterminate { background:#f5f6f8; border-color:#f5f6f8; }
+.comfyui-mcp-root .cmp-row-check.is-indeterminate::after { content:""; width:8px; height:2px; background:currentColor; border-radius:1px; }
+.comfyui-mcp-root .cmp-row-check.is-disabled { opacity:.35; cursor:not-allowed; }
+body.studio-theme-dark .comfyui-mcp-root .cmp-row-check.is-disabled { opacity:.3; }
+.comfyui-mcp-root .cmp-row-check.is-disabled:hover { border-color:var(--line-strong); }
+
+/* ---------- Workflow list (in modal) ---------- */
+.comfyui-mcp-root .cmp-list { flex:1; min-height:0; overflow-y:auto; border:1px solid var(--line); border-radius:12px; padding:8px; background:var(--panel); }
+.comfyui-mcp-root .cmp-item { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:9px; border:1px solid transparent; background:transparent; transition:background .15s ease, border-color .15s ease, transform .15s ease; }
+.comfyui-mcp-root .cmp-item:hover { background:var(--soft); border-color:var(--line); }
+.comfyui-mcp-root .cmp-item.is-selected { background:var(--soft); border-color:var(--line-strong); }
+.comfyui-mcp-root .cmp-item.is-hidden { display:none; }
+.comfyui-mcp-root .cmp-item-meta { min-width:0; flex:1; }
+.comfyui-mcp-root .cmp-item-title { font-size:12.5px; font-weight:850; color:var(--text); line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comfyui-mcp-root .cmp-item-sub { font-size:10px; font-weight:700; color:var(--faint); margin-top:2px; display:flex; align-items:center; gap:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comfyui-mcp-root .cmp-error-tag { color:#dc2626; background:rgba(220,38,38,.08); padding:1px 6px; border-radius:4px; font-weight:700; }
+body.studio-theme-dark .comfyui-mcp-root .cmp-error-tag { color:#fca5a5; background:rgba(248,113,113,.18); }
+.comfyui-mcp-root .cmp-empty { padding:18px 14px; text-align:center; color:var(--faint); font-size:11px; font-weight:700; border:1px dashed var(--line); border-radius:10px; background:transparent; }
+.comfyui-mcp-root .cmp-import-btn { width:auto !important; height:30px !important; padding:0 12px !important; font-size:11px !important; flex:0 0 auto; }
+
+/* ---------- Modal container ---------- */
+.comfyui-mcp-root .cmp-modal { position:fixed; inset:0; z-index:200; display:none; align-items:center; justify-content:center; padding:24px; }
+.comfyui-mcp-root .cmp-modal.is-open { display:flex; }
+.comfyui-mcp-root .cmp-modal-open body { overflow:hidden; }
+.comfyui-mcp-root .cmp-modal-backdrop { position:absolute; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); opacity:0; transition:opacity .18s ease; }
+body.studio-theme-dark .comfyui-mcp-root .cmp-modal-backdrop { background:rgba(0,0,0,.62); }
+.comfyui-mcp-root .cmp-modal.is-open .cmp-modal-backdrop { opacity:1; }
+.comfyui-mcp-root .cmp-modal-panel { position:relative; width:min(720px, 92vw); max-height:min(720px, 84vh); background:var(--panel); border:1px solid var(--line); border-radius:16px; display:flex; flex-direction:column; box-shadow:0 30px 90px rgba(0,0,0,.28); overflow:hidden; transform:translateY(8px) scale(.985); opacity:0; transition:transform .22s cubic-bezier(.2,.7,.3,1), opacity .18s ease; }
+body.studio-theme-dark .comfyui-mcp-root .cmp-modal-panel { box-shadow:0 30px 90px rgba(0,0,0,.5); }
+.comfyui-mcp-root .cmp-modal.is-open .cmp-modal-panel { transform:translateY(0) scale(1); opacity:1; }
+
+.comfyui-mcp-root .cmp-modal-header { padding:14px 18px 12px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:6px; background:var(--panel); }
+.comfyui-mcp-root .cmp-modal-title-row { display:flex; align-items:center; gap:10px; min-width:0; }
+.comfyui-mcp-root .cmp-modal-title { margin:0; flex:1; min-width:0; font-size:14px; font-weight:900; color:var(--text); letter-spacing:-.01em; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comfyui-mcp-root .cmp-modal-icon-btn { width:32px; height:32px; min-width:32px; min-height:32px; border-radius:8px; background:transparent; border:1px solid transparent; color:var(--muted); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s ease, border-color .15s ease, color .15s ease; flex:0 0 auto; }
+.comfyui-mcp-root .cmp-modal-icon-btn:hover { background:var(--soft); border-color:var(--line); color:var(--text); }
+.comfyui-mcp-root .cmp-modal-icon-btn:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.comfyui-mcp-root .cmp-modal-icon-btn:active { transform:scale(.96); }
+.comfyui-mcp-root .cmp-modal-status-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.comfyui-mcp-root .cmp-modal-status-row .cmp-badge { flex:0 0 auto; }
+.comfyui-mcp-root .cmp-modal-status-row .cmp-hint { flex:1; min-width:0; }
+
+.comfyui-mcp-root .cmp-modal-body { padding:14px 18px; flex:1; min-height:0; display:flex; flex-direction:column; gap:10px; background:var(--bg); }
+.comfyui-mcp-root .cmp-modal-toolbar { display:flex; flex-direction:column; gap:8px; }
+
+.comfyui-mcp-root .cmp-modal-footer { padding:12px 18px; border-top:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--panel); }
+.comfyui-mcp-root .cmp-modal-footer-info { font-size:11px; font-weight:700; color:var(--faint); display:flex; align-items:center; gap:6px; }
+.comfyui-mcp-root .cmp-modal-footer-actions { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+.comfyui-mcp-root .cmp-modal-footer-actions .cmp-action-btn { height:36px; min-width:88px; padding:0 14px; border-radius:10px; font-size:12.5px; font-weight:850; border:1px solid var(--line); background:var(--panel); color:var(--text); cursor:pointer; transition:background .15s ease, border-color .15s ease, transform .15s ease; }
+.comfyui-mcp-root .cmp-modal-footer-actions .cmp-action-btn:hover { background:var(--soft); border-color:var(--text); }
+.comfyui-mcp-root .cmp-modal-footer-actions .cmp-action-btn:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.comfyui-mcp-root .cmp-modal-footer-actions .cmp-action-btn.is-primary { background:var(--accent); border-color:var(--accent); color:var(--bg); }
+.comfyui-mcp-root .cmp-modal-footer-actions .cmp-action-btn.is-primary:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(15,23,42,.15); }
+.comfyui-mcp-root .cmp-modal-footer-actions .cmp-action-btn.is-primary:disabled { opacity:.45; cursor:not-allowed; transform:none; box-shadow:none; }
+.comfyui-mcp-root .cmp-modal-footer-actions .cmp-action-btn.is-running { opacity:.6; cursor:wait; transform:none !important; box-shadow:none !important; }
+.comfyui-mcp-root .cmp-modal-footer-actions .cmp-action-btn .btn-label { display:inline-flex; align-items:center; gap:6px; }
+
+/* The plugin attaches the modal to <body>, so body:has(.cmp-modal-open) was
+   hard to do portably. We toggle a class on body via JS instead. */
+body.cmp-modal-open { overflow:hidden; }
+
+@media (max-width:560px) {
+    .comfyui-mcp-root .cmp-modal { padding:12px; }
+    .comfyui-mcp-root .cmp-modal-panel { width:100%; max-height:90vh; }
+    .comfyui-mcp-root .cmp-modal-title { font-size:13px; }
+    .comfyui-mcp-root .cmp-modal-footer { flex-wrap:wrap; }
+    .comfyui-mcp-root .cmp-modal-footer-info { flex:1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .comfyui-mcp-root .cmp-modal-backdrop,
+    .comfyui-mcp-root .cmp-modal-panel {
+        transition: none;
+    }
+    .comfyui-mcp-root .cmp-modal-panel { transform: none; }
+}
