@@ -15,3 +15,5 @@ node_modules/
 ._!
 ._*
 
+assets/library/
+data/asset_library.json
