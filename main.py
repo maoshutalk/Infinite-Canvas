@@ -6417,8 +6417,28 @@ def generate_video_preview_image(path: str, width: int) -> Image.Image:
         except OSError:
             pass
 
+def _fwd_hdr(request):
+    r = request.headers.get("range")
+    return {"range": r} if r else {}
+
 @app.get("/api/media-preview")
 async def media_preview(url: str, w: int = 512):
+    if isinstance(url, str) and url.startswith("video-index://"):
+        from app_vi_integration.client import vi_stream, ViUnreachable
+        from app_vi_integration.config import load_vi_config
+        _p = os.path.join(DATA_DIR, "storage_settings.json")
+        try: _s = json.loads(open(_p, encoding="utf-8").read()) if os.path.isfile(_p) else {}
+        except Exception: _s = {}
+        _c = load_vi_config(_s)
+        if not _c.enabled: raise HTTPException(409, "Video Index plugin disabled")
+        _a = url[len("video-index://"):].split("?", 1)[0].split("#", 1)[0]
+        try:
+            _t, _b, _d = await vi_stream(_a, "thumbnail", request_headers=_fwd_hdr(request), config=_c)
+        except ViUnreachable as _e:
+            raise HTTPException(503, f"Video Index unreachable: {_e}") from None
+        async def _g():
+            async for c in _b: yield c
+        return StreamingResponse(_g(), status_code=_t, media_type="image/jpeg", headers=_d)
     path = output_file_from_url(url)
     if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="媒体文件不存在")
