@@ -1,5 +1,46 @@
-import { test } from 'node:test';
+import { test, beforeEach } from 'node:test';
+import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PLUGIN_SRC = readFileSync(join(__dirname, '..', 'static', 'js', 'comfyui-mcp-plugin.js'), 'utf8');
+const CSS_SRC = readFileSync(join(__dirname, '..', 'static', 'css', 'comfyui-mcp-plugin.css'), 'utf8');
+
+function setupDom({ workflows = [], state = 'ok' } = {}) {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body>
+        <div data-comfyui-mcp-trigger></div>
+        <style>${CSS_SRC}</style>
+    </body></html>`, { runScripts: 'outside-only', url: 'http://localhost/' });
+
+    const fetchCalls = [];
+    dom.window.fetch = async (url) => {
+        fetchCalls.push(url);
+        if (url.includes('/api/mcp/status')) {
+            return { ok: true, json: async () => ({ state, matched_instance: 'test:8188', file_count: workflows.length }) };
+        }
+        if (url.includes('/api/mcp/workflows')) {
+            return { ok: true, json: async () => ({ workflows }) };
+        }
+        return { ok: true, json: async () => ({}) };
+    };
+    dom.window.showToast = () => {};
+    dom.window.loadList = () => Promise.resolve();
+    dom.window.lucide = { createIcons: () => {} };
+
+    dom.window.eval(PLUGIN_SRC);
+    return { dom, fetchCalls, win: dom.window, doc: dom.window.document };
+}
+
+const makeWorkflows = (n) => Array.from({ length: n }, (_, i) => ({
+    name: `wf-${String(i + 1).padStart(2, '0')}.json`,
+    title: `Workflow ${i + 1}`,
+    format: i % 2 === 0 ? 'api' : 'ui',
+    size: 1024 * (i + 1),
+    mtime: Date.now() - i * 1000,
+}));
 
 const computeFiltered = (items, filter, exclude) => {
     const term = (filter || '').trim().toLowerCase();
@@ -184,4 +225,101 @@ test('windowedPages: total 17, current 17 → 1 … 15 16 17', () => {
 
 test('windowedPages: total 17, current 1 → 1 2 3 … 17', () => {
     assert.deepEqual(windowedPages(1, 17), [1, 2, 3, '…', 17]);
+});
+
+test('renderList: with 17 workflows shows pagination with 2 pages', async () => {
+    const { doc } = setupDom({ workflows: makeWorkflows(17) });
+    await new Promise(r => setTimeout(r, 50));  // wait for loadStatusAndList
+    const items = doc.querySelectorAll('.cmp-item');
+    assert.equal(items.length, 10, 'first page shows 10 items');
+    const pageBtns = doc.querySelectorAll('.cmp-page-btn');
+    assert.ok(pageBtns.length >= 3, 'at least prev + page1 + next');
+    const status = doc.querySelector('.cmp-page-status');
+    assert.match(status.textContent, /共 17 项/);
+});
+
+test('renderList: clicking page 2 shows remaining items', async () => {
+    const { doc, win } = setupDom({ workflows: makeWorkflows(17) });
+    await new Promise(r => setTimeout(r, 50));
+    const page2Btn = Array.from(doc.querySelectorAll('.cmp-page-btn')).find(b => b.dataset.page === '2');
+    assert.ok(page2Btn);
+    page2Btn.click();
+    await new Promise(r => setTimeout(r, 20));
+    const items = doc.querySelectorAll('.cmp-item');
+    assert.equal(items.length, 7, 'second page shows 7 items');
+    const status = doc.querySelector('.cmp-page-status');
+    assert.match(status.textContent, /第 2\/2 页/);
+});
+
+test('renderList: empty workflows shows empty state, no pagination', async () => {
+    const { doc } = setupDom({ workflows: [] });
+    await new Promise(r => setTimeout(r, 50));
+    const empty = doc.querySelector('.cmp-empty');
+    assert.ok(empty);
+    assert.match(empty.textContent, /暂无工作流/);
+    const bar = doc.getElementById('cmpPagination');
+    assert.ok(bar.classList.contains('is-hidden'), 'pagination hidden when 0 items');
+});
+
+test('renderList: search filter narrows result and resets to page 1', async () => {
+    const { doc } = setupDom({ workflows: makeWorkflows(25) });
+    await new Promise(r => setTimeout(r, 50));
+    const search = doc.getElementById('cmpSearchInput');
+    search.value = 'Workflow 1';
+    search.dispatchEvent(new doc.defaultView.Event('input'));
+    await new Promise(r => setTimeout(r, 20));
+    // Workflows 1, 10-19 all contain "1" — at least 11 items
+    const items = doc.querySelectorAll('.cmp-item');
+    assert.ok(items.length > 0 && items.length <= 10, 'at most 10 items per page');
+});
+
+test('renderList: exclude filter narrows result', async () => {
+    const { doc } = setupDom({ workflows: makeWorkflows(25) });
+    await new Promise(r => setTimeout(r, 50));
+    const exclude = doc.getElementById('cmpExcludeInput');
+    exclude.value = 'wf-01 wf-02';
+    exclude.dispatchEvent(new doc.defaultView.Event('input'));
+    await new Promise(r => setTimeout(r, 20));
+    const items = Array.from(doc.querySelectorAll('.cmp-item'));
+    assert.ok(items.length > 0);
+    items.forEach(it => {
+        assert.ok(!it.dataset.name.includes('wf-01'));
+        assert.ok(!it.dataset.name.includes('wf-02'));
+    });
+});
+
+test('cross-page 全选: page 1 selects first 10, page 2 adds remaining 7', async () => {
+    const { doc, win } = setupDom({ workflows: makeWorkflows(17) });
+    await new Promise(r => setTimeout(r, 50));
+    const selectAll = doc.getElementById('cmpSelectAllToggle');
+    selectAll.click();
+    await new Promise(r => setTimeout(r, 20));
+    let count = doc.getElementById('cmpSelectCount').textContent;
+    assert.equal(count, '10', 'after page 1 全选, count is 10');
+    const page2Btn = Array.from(doc.querySelectorAll('.cmp-page-btn')).find(b => b.dataset.page === '2');
+    page2Btn.click();
+    await new Promise(r => setTimeout(r, 20));
+    const selectAll2 = doc.getElementById('cmpSelectAllToggle');
+    selectAll2.click();
+    await new Promise(r => setTimeout(r, 20));
+    count = doc.getElementById('cmpSelectCount').textContent;
+    assert.equal(count, '17', 'after page 2 全选, total 17');
+});
+
+test('cache-busting: fetch URLs include ?_= query', async () => {
+    const { fetchCalls } = setupDom({ workflows: makeWorkflows(5) });
+    await new Promise(r => setTimeout(r, 50));
+    const statusCalls = fetchCalls.filter(u => u.includes('/api/mcp/status'));
+    const listCalls = fetchCalls.filter(u => u.includes('/api/mcp/workflows'));
+    assert.ok(statusCalls.length >= 1);
+    assert.ok(listCalls.length >= 1);
+    assert.match(statusCalls[0], /\?_=\d+/);
+    assert.match(listCalls[0], /\?_=\d+/);
+});
+
+test('lastFetched indicator updates after successful fetch', async () => {
+    const { doc } = setupDom({ workflows: makeWorkflows(5) });
+    await new Promise(r => setTimeout(r, 50));
+    const lastFetched = doc.getElementById('cmpLastFetched');
+    assert.match(lastFetched.textContent, /最后更新 \d{2}:\d{2}:\d{2}/);
 });
