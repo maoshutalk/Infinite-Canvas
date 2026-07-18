@@ -442,8 +442,8 @@
     }
     function toggleSelectAll() {
         const filtered = computeFiltered(STATE.items, STATE.filter, STATE.exclude);
-        const startIdx = (STATE.page - 1) * STATE.pageSize;
-        const inScope = filtered.slice(startIdx);
+        const slice = pageSlice(filtered.length, STATE.page, STATE.pageSize);
+        const inScope = filtered.slice(slice.start, slice.end);
         if (!inScope.length) return;
         const allSelected = inScope.every(it => STATE.selected.has(it.name));
         if (allSelected) inScope.forEach(it => STATE.selected.delete(it.name));
@@ -475,7 +475,7 @@
         const r = getRefs();
         if (r.excludeClearBtn) r.excludeClearBtn.classList.toggle('is-hidden', STATE.exclude.length === 0);
         STATE.page = 1;  // reset to first page on filter change
-        renderList();
+        renderList(STATE.items);
     }
     function clearExclude() {
         const r = getRefs();
@@ -484,7 +484,7 @@
         STATE.exclude = [];
         if (r.excludeClearBtn) r.excludeClearBtn.classList.add('is-hidden');
         STATE.page = 1;
-        renderList();
+        renderList(STATE.items);
     }
 
     function renderList(items) {
@@ -809,7 +809,7 @@
                 if (!Number.isFinite(next) || next < 1) return;
                 if (next !== cur) {
                     STATE.page = next;
-                    renderList();
+                    renderList(STATE.items);
                     const listEl = document.getElementById('cmpList');
                     if (listEl) listEl.scrollTop = 0;
                 }
