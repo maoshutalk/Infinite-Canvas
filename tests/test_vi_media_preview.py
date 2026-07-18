@@ -18,3 +18,4 @@ class ViMediaPreviewExtensionTests(unittest.TestCase):
         # acceptance plan. The unit-level patch is covered by route +
         # client tests in Tasks 2/4.
         self.assertTrue(True)
+

@@ -39,3 +39,4 @@ class StreamTests(unittest.TestCase):
         cfg = ViConfig(False, "", 30, 60)
         r = _client_with_config(cfg).get("/api/vi/assets/abc/thumbnail")
         self.assertEqual(r.status_code, 409)
+

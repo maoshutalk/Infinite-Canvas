@@ -80,3 +80,4 @@ async def _proxy_media(asset_id: str, kind: str, request: Request):
             yield chunk
 
     return StreamingResponse(gen(), status_code=status, headers=headers)
+
