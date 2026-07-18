@@ -6149,7 +6149,7 @@ function renderNode(node){
         } else {
         body.innerHTML = `<div class="blank-image"><i data-lucide="image-plus" class="w-7 h-7"></i><div class="text-[11px] font-bold">${tr('canvas.clickDragPasteImage')}</div></div>`;
             const blank = body.querySelector('.blank-image');
-            blank.onclick = () => pickImageForNode(node.id);
+            blank.onclick = () => openImageAssetPicker(node.id);
             blank.ondragover = e => allowImageNodeDropEvent(e, blank);
             blank.ondragleave = e => { e.stopPropagation(); blank.classList.remove('drag-over'); };
             blank.ondrop = e => handleImageNodeDropEvent(e, node.id, blank);
@@ -14793,3 +14793,25 @@ window.onload = async () => {
         window.location.replace(canvasListUrlForProject(rememberedCanvasListProject()));
     }
 };
+
+// === Video Index plugin integration ===================
+window.addEventListener('image-picker:apply', (ev) => {
+    const detail = ev && ev.detail;
+    if (!detail) return;
+    const { nodeId, url, item } = detail;
+    if (!nodeId || !url) return;
+    // setImageNodeFromOutput is canvas.js's canonical image-node mutator
+    // (line 4102); it does pushUndo → mutate url/name/mediaKind → render → scheduleSave.
+    if (typeof setImageNodeFromOutput === 'function') {
+        setImageNodeFromOutput(nodeId, url);
+    }
+    // Override derived name with the picker's item.name when present.
+    if (item && item.name && typeof nodes !== 'undefined') {
+        const node = nodes.find(n => n && n.id === nodeId);
+        if (node) {
+            node.name = item.name;
+            if (typeof render === 'function') render();
+        }
+    }
+});
+// === end VI patch ===================================
