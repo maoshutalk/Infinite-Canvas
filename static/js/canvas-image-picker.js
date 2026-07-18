@@ -26,9 +26,26 @@
         state.loading = true;
         try {
             if (state.scope === 'local') {
-                const r = await fetch('/api/asset-library/items?limit=200', { credentials: 'same-origin' });
+                const r = await fetch('/api/asset-library', { credentials: 'same-origin' });
                 const data = await r.json();
-                state.items = (data.items || []);
+                const lib = data && data.library ? data.library : data;
+                const allItems = [];
+                const libs = (lib && lib.libraries) || [];
+                libs.forEach(l => {
+                    (l.categories || []).forEach(cat => {
+                        if(cat.type && cat.type !== 'image') return;
+                        (cat.items || []).forEach(item => {
+                            if(!item.url) return;
+                            allItems.push({
+                                id: item.id,
+                                url: item.url,
+                                name: item.name || '',
+                                kind: item.kind || 'image',
+                            });
+                        });
+                    });
+                });
+                state.items = allItems;
             } else if (state.scope.startsWith('vi:')) {
                 const sourceId = state.scope.slice(3);
                 const params = new URLSearchParams();
