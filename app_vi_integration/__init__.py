@@ -38,7 +38,14 @@ def register(app, settings, library_path: Optional[Path] = None):
     app.include_router(_rm.router)
     if library_path is not None:
         from .sync import sync_vi_libraries
-        sync_vi_libraries(settings, library_path=library_path)
+        # sync_vi_libraries is async; register() is sync, so run it inline.
+        # Errors here must NOT break app startup — log and continue.
+        import asyncio
+        import logging as _logging
+        try:
+            asyncio.run(sync_vi_libraries(settings, library_path=library_path))
+        except Exception as _e:
+            _logging.getLogger(__name__).warning("VI sync failed at startup: %s", _e)
 
 
 # Re-exports for direct imports in tests
