@@ -6074,11 +6074,12 @@ function renderNode(node){
     const body = document.createElement('div');
     body.className = 'node-body';
     if(node.type === 'image') {
+        const libraryBtnHtml = `<button class="prompt-template-btn" type="button" data-image-library-open data-image-library-node-id="${escapeAttr(node.id)}" title="从素材库选择图片"><i data-lucide="library"></i><span>素材库</span></button>`;
         if(node.url) {
             const missing = isMissingAssetUrl(node.url);
             const mediaKind = mediaKindForNode(node);
             const isEditableImage = mediaKind === 'image' && !missing;
-            body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"')}</div><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</div>`;
+            body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"')}</div><div class="image-caption-row"><span class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</span>${libraryBtnHtml}</div>`;
             if(!missing && mediaKind !== 'image'){
                 const mediaHtml = mediaKind === 'video'
                     ? `<div class="media-card video-card">${canvasVideoPreviewHtml(node.url, 768, 'draggable="false" data-video-fallback-attrs="controls"')}<button class="canvas-video-play" type="button" title="播放"><i data-lucide="play"></i></button></div>`
@@ -6148,15 +6149,32 @@ function renderNode(node){
                 }, true);
             }
             body.addEventListener('dblclick', openPreview, true);
+            const imageLibBtn = body.querySelector('[data-image-library-open]');
+            if(imageLibBtn) {
+                imageLibBtn.onclick = e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openImageAssetPicker(node.id);
+                };
+            }
             if(loadedImg && loadedImg.complete && loadedImg.naturalHeight > 0){
                 requestAnimationFrame(refreshGeometry);
             } else if(loadedImg) {
                 loadedImg.onload = () => refreshGeometryAfterLayout();
             }
         } else {
-        body.innerHTML = `<div class="blank-image"><i data-lucide="image-plus" class="w-7 h-7"></i><div class="text-[11px] font-bold">${tr('canvas.clickDragPasteImage')}</div></div>`;
+        const blankLibraryBtnHtml = `<button class="prompt-template-btn" type="button" data-blank-image-library-open data-blank-image-library-node-id="${escapeAttr(node.id)}" title="从素材库选择图片"><i data-lucide="library"></i><span>素材库</span></button>`;
+        body.innerHTML = `<div class="blank-image"><i data-lucide="image-plus" class="w-7 h-7"></i><div class="text-[11px] font-bold">${tr('canvas.clickDragPasteImage')}</div><div style="margin-top:6px">${blankLibraryBtnHtml}</div></div>`;
             const blank = body.querySelector('.blank-image');
             blank.onclick = () => openImageAssetPicker(node.id);
+            const blankLibBtn = body.querySelector('[data-blank-image-library-open]');
+            if(blankLibBtn) {
+                blankLibBtn.onclick = e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openImageAssetPicker(node.id);
+                };
+            }
             blank.ondragover = e => allowImageNodeDropEvent(e, blank);
             blank.ondragleave = e => { e.stopPropagation(); blank.classList.remove('drag-over'); };
             blank.ondrop = e => handleImageNodeDropEvent(e, node.id, blank);
