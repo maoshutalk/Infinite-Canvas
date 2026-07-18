@@ -17676,6 +17676,36 @@ def run_workflow(name: str, payload: WorkflowRunRequest):
     )
     return generate(req)
 
+# === Video Index plugin =========================================
+# Lazy import keeps default builds free of the plugin when disabled.
+try:
+    from pathlib import Path as _Path
+
+    _settings_path = _Path(DATA_DIR) / "storage_settings.json"
+    _settings_data = json.loads(_settings_path.read_text("utf-8")) if _settings_path.exists() else {}
+    _lib_path = _Path(DATA_DIR) / "asset_library.json"
+    from app_vi_integration import register as _register_vi
+    _register_vi(app, _settings_data, library_path=_lib_path)
+    # Inject config so the routers can read it without a global.
+    def _vi_config_provider():
+        try:
+            _data = json.loads(_settings_path.read_text("utf-8")) if _settings_path.exists() else {}
+        except Exception:
+            _data = {}
+        from app_vi_integration.config import load_vi_config
+        return load_vi_config(_data)
+    app.state.vi_config_provider = _vi_config_provider
+
+    @app.middleware("http")
+    async def _vi_inject(request, call_next):
+        if hasattr(app.state, "vi_config_provider"):
+            request.app.state.vi_config = app.state.vi_config_provider()
+        return await call_next(request)
+except Exception as _vi_err:
+    import logging as _logging
+    _logging.getLogger(__name__).warning("Video Index plugin not loaded: %s", _vi_err)
+# === End Video Index plugin ======================================
+
 if __name__ == "__main__":
     import uvicorn
     # 关闭服务端协议级 WebSocket ping：部分客户端（如 PS UXP 面板）不会自动回 pong，
