@@ -288,14 +288,18 @@ test('renderList: exclude filter narrows result', async () => {
     });
 });
 
-test('cross-page 全选: page 1 selects first 10, page 2 adds remaining 7', async () => {
+test('cross-page 全选: page 1 selects all 17 (current + after), page 2 toggle removes page-1 picks', async () => {
+    // Spec: 全选 from current page selects current page + all subsequent pages.
+    // On page 1 of 17: should select all 17 (10 + 7).
+    // Navigate to page 2, click 全选 again: inScope = items 11-17, all already
+    // selected → toggle deselects them. Final count = 10 (only page-1 items remain).
     const { doc, win } = setupDom({ workflows: makeWorkflows(17) });
     await new Promise(r => setTimeout(r, 50));
     const selectAll = doc.getElementById('cmpSelectAllToggle');
     selectAll.click();
     await new Promise(r => setTimeout(r, 20));
     let count = doc.getElementById('cmpSelectCount').textContent;
-    assert.equal(count, '10', 'after page 1 全选, count is 10');
+    assert.equal(count, '17', 'after page 1 全选, all 17 selected (current + after)');
     const page2Btn = Array.from(doc.querySelectorAll('.cmp-page-btn')).find(b => b.dataset.page === '2');
     page2Btn.click();
     await new Promise(r => setTimeout(r, 20));
@@ -303,7 +307,7 @@ test('cross-page 全选: page 1 selects first 10, page 2 adds remaining 7', asyn
     selectAll2.click();
     await new Promise(r => setTimeout(r, 20));
     count = doc.getElementById('cmpSelectCount').textContent;
-    assert.equal(count, '17', 'after page 2 全选, total 17');
+    assert.equal(count, '10', 'after page 2 全选 (toggle), only page-1 items remain');
 });
 
 test('cache-busting: fetch URLs include ?_= query', async () => {

@@ -442,8 +442,8 @@
     }
     function toggleSelectAll() {
         const filtered = computeFiltered(STATE.items, STATE.filter, STATE.exclude);
-        const slice = pageSlice(filtered.length, STATE.page, STATE.pageSize);
-        const inScope = filtered.slice(slice.start, slice.end);
+        const startIdx = (STATE.page - 1) * STATE.pageSize;
+        const inScope = filtered.slice(startIdx);   // current page + all subsequent pages
         if (!inScope.length) return;
         const allSelected = inScope.every(it => STATE.selected.has(it.name));
         if (allSelected) inScope.forEach(it => STATE.selected.delete(it.name));
