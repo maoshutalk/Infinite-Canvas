@@ -324,9 +324,9 @@ body.canvas-selecting .node .llm-bubble { pointer-events:none !important; }
 .node.sized.image-node img { flex:1; min-height:0; height:100%; max-height:none; }
 .node.sized.image-node video { width:100%; height:100%; object-fit:contain; }
 .image-caption { flex:0 0 auto; }
-.image-caption-row { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; width:100%; padding:0 2px; box-sizing:border-box; }
-.image-caption-row .image-caption { flex:1 1 auto; min-width:0; padding-right:6px; }
-.image-caption-row .prompt-template-btn { flex:0 0 auto; margin-left:auto; }
+.image-caption-row { display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; min-width:0 !important; width:100% !important; padding:0 2px !important; box-sizing:border-box !important; }
+.image-caption-row .image-caption { flex:1 1 auto !important; min-width:0 !important; padding-right:6px !important; }
+.image-caption-row .prompt-template-btn { flex:0 0 auto !important; margin-left:auto !important; }
 .blank-image { height:190px; border:1px dashed #cbd5e1; border-radius:16px; background:#f8fafc; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#94a3b8; cursor:pointer; transition:all .2s var(--ease); }
 .node.sized .blank-image { height:100%; min-height:72px; }
 .blank-image:hover,.blank-image.drag-over { border-color:#111827; color:#111827; background:#fff; }
