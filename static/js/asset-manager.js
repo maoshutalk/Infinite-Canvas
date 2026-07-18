@@ -4762,3 +4762,36 @@ window.addEventListener('message', event => {
     if(event.data?.type === 'studio-theme') window.StudioTheme?.apply?.(event.data.theme);
 });
 document.addEventListener('DOMContentLoaded', () => loadAll().catch(err => setStatus(err.message || '加载失败')));
+
+// === Video Index plugin hooks ===
+(function(){
+    const vi = window.__VI_PLUGIN__;
+    if (!vi) return; // plugin disabled
+    // Patch renderAssetCard
+    if (typeof renderAssetCard === 'function') {
+        const _origCard = renderAssetCard;
+        window.renderAssetCard = function(item) {
+            if (vi.isViItem(item)) return vi.renderCard(item);
+            return _origCard.apply(this, arguments);
+        };
+    }
+    // Patch renderAssetTreeBranch
+    if (typeof renderAssetTreeBranch === 'function') {
+        const _origBranch = renderAssetTreeBranch;
+        window.renderAssetTreeBranch = function(lib) {
+            if (vi.isViLibrary(lib)) {
+                // VI libraries are read-only; render minimal branch without edit buttons.
+                const catHtml = (lib.categories || [])
+                    .map(cat => `<button class="asset-tree-leaf" type="button" data-lib-id="${lib.id}" data-cat-id="${cat.id}">${escapeHtml(cat.name)} <span>0</span></button>`)
+                    .join('');
+                return (
+                    `<div class="asset-tree-node vi vi-tree-node" data-lib-id="${lib.id}">`
+                    + `<div class="asset-tree-row"><span class="asset-tree-icon">📡</span><span>${escapeHtml(lib.name)}</span></div>`
+                    + `<div class="asset-tree-children">${catHtml}</div>`
+                    + `</div>`
+                );
+            }
+            return _origBranch.apply(this, arguments);
+        };
+    }
+})();

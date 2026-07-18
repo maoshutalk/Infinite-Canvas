@@ -1,0 +1,24 @@
+/* Video Index plugin styles */
+.vi-asset-card { position: relative; border-radius: 8px; overflow: hidden; }
+.vi-asset-card > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vi-badge {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(11, 14, 22, 0.78); color: #c3f5ff;
+    padding: 2px 6px; border-radius: 6px; font-size: 11px;
+    line-height: 1; border: 1px solid rgba(195, 245, 255, 0.4);
+    pointer-events: none;
+}
+.vi-asset-name {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 4px 6px; font-size: 11px; color: #dbe4e8;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+}
+.vi-tree-node {
+    opacity: 0.92;
+}
+.vi-tree-node::before {
+    content: '📡'; margin-right: 4px;
+}
+.vi-tree-node.vi-offline {
+    filter: hue-rotate(140deg) saturate(0.6);
+}
