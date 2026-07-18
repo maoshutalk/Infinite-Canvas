@@ -327,3 +327,46 @@ test('lastFetched indicator updates after successful fetch', async () => {
     const lastFetched = doc.getElementById('cmpLastFetched');
     assert.match(lastFetched.textContent, /最后更新 \d{2}:\d{2}:\d{2}/);
 });
+
+test('search resets page to 1 when on a later page', async () => {
+    const { doc, win } = setupDom({ workflows: makeWorkflows(25) });
+    await new Promise(r => setTimeout(r, 50));
+    // Navigate to page 2 via the page button
+    const page2Btn = Array.from(doc.querySelectorAll('.cmp-page-btn')).find(b => b.dataset.page === '2');
+    assert.ok(page2Btn);
+    page2Btn.click();
+    await new Promise(r => setTimeout(r, 20));
+    let status = doc.querySelector('.cmp-page-status');
+    assert.match(status.textContent, /第 2\/3 页/, 'confirm we start on page 2 of 3');
+    // Type a narrow search term — this should reset STATE.page back to 1
+    const search = doc.getElementById('cmpSearchInput');
+    search.value = 'Workflow 5';
+    search.dispatchEvent(new doc.defaultView.Event('input'));
+    await new Promise(r => setTimeout(r, 20));
+    // Verify auto-reset: status text must show page 1
+    status = doc.querySelector('.cmp-page-status');
+    assert.match(status.textContent, /第 1\//, 'search input resets page to 1');
+});
+
+test('arrow-left/right on pagination changes page', async () => {
+    const { doc, win } = setupDom({ workflows: makeWorkflows(25) });
+    await new Promise(r => setTimeout(r, 50));
+    const paginationEl = doc.getElementById('cmpPagination');
+    // Focus the pagination container, dispatch ArrowRight
+    let status = doc.querySelector('.cmp-page-status');
+    assert.match(status.textContent, /第 1\/3 页/, 'start on page 1 of 3');
+    paginationEl.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    await new Promise(r => setTimeout(r, 20));
+    status = doc.querySelector('.cmp-page-status');
+    assert.match(status.textContent, /第 2\/3 页/, 'ArrowRight advances to page 2');
+    paginationEl.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    await new Promise(r => setTimeout(r, 20));
+    status = doc.querySelector('.cmp-page-status');
+    assert.match(status.textContent, /第 3\/3 页/, 'second ArrowRight advances to page 3');
+    paginationEl.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+    await new Promise(r => setTimeout(r, 20));
+    paginationEl.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+    await new Promise(r => setTimeout(r, 20));
+    status = doc.querySelector('.cmp-page-status');
+    assert.match(status.textContent, /第 1\/3 页/, 'two ArrowLefts return to page 1');
+});

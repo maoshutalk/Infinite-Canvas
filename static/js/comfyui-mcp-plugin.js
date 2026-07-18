@@ -459,6 +459,7 @@
         STATE.filter = String(value || '').trim().toLowerCase();
         const r = getRefs();
         if (r.searchClearBtn) r.searchClearBtn.classList.toggle('is-hidden', STATE.filter.length === 0);
+        STATE.page = 1;  // reset to first page on filter change
         renderList(STATE.items);
     }
     function clearSearch() {
@@ -467,6 +468,7 @@
         if (input) input.value = '';
         STATE.filter = '';
         if (r.searchClearBtn) r.searchClearBtn.classList.add('is-hidden');
+        STATE.page = 1;
         renderList(STATE.items);
     }
 
@@ -807,6 +809,24 @@
                 else if (target === 'last') next = pageCount(computeFiltered(STATE.items, STATE.filter, STATE.exclude).length, STATE.pageSize);
                 else next = Number(target);
                 if (!Number.isFinite(next) || next < 1) return;
+                if (next !== cur) {
+                    STATE.page = next;
+                    renderList(STATE.items);
+                    const listEl = document.getElementById('cmpList');
+                    if (listEl) listEl.scrollTop = 0;
+                }
+            });
+            // Pagination keyboard navigation: ArrowLeft/ArrowRight
+            paginationEl.addEventListener('keydown', (e) => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                if (e.altKey || e.ctrlKey || e.metaKey) return;
+                e.preventDefault();
+                const filtered = computeFiltered(STATE.items, STATE.filter, STATE.exclude);
+                const totalPages = pageCount(filtered.length, STATE.pageSize);
+                const cur = STATE.page;
+                let next = cur;
+                if (e.key === 'ArrowLeft') next = Math.max(1, cur - 1);
+                else next = Math.min(totalPages, cur + 1);
                 if (next !== cur) {
                     STATE.page = next;
                     renderList(STATE.items);
