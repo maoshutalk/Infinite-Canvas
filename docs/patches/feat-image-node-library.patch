@@ -1,0 +1,224 @@
+From a6045dc36a2fda39e50312a9399dee2d78dbd5e5 Mon Sep 17 00:00:00 2001
+From: maoshutalk <maoshutalk@gmail.com>
+Date: Sat, 18 Jul 2026 21:07:17 +1000
+Subject: [PATCH 1/2] =?UTF-8?q?feat(canvas):=20images-node=20=E7=B4=A0?=
+ =?UTF-8?q?=E6=9D=90=E5=BA=93=20button=20=E2=86=92=20picker=20modal?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add a 素材库 button to every image node (with or without url). Clicking
+it opens the Plan 2 imageAssetPickerModal — a focused picker (image grid
++ search + close) with no asset-library management chrome. Clicking a
+thumb dispatches the image-picker:apply event that canvas.js already
+handles via setImageNodeFromOutput.
+
+- renderNode: emits data-image-library-open / data-blank-image-library-open
+  buttons styled like the existing prompt-template-btn.
+- Both handlers route through openImageAssetPicker(node.id).
+- canvas.css: .image-caption-row keeps the name + button on one line.
+
+Tests: tests/test_image_node_library_button.mjs (5/5 pass); full jsdom
+suite 57/57 pass; python 55/55 pass.
+
+Co-Authored-By: claude-sonnet-4-6 <noreply@anthropic.com>
+---
+ static/css/canvas.css                    |  2 +
+ static/js/canvas.js                      | 22 +++++++++-
+ tests/test_image_node_library_button.mjs | 56 ++++++++++++++++++++++++
+ 3 files changed, 78 insertions(+), 2 deletions(-)
+ create mode 100644 tests/test_image_node_library_button.mjs
+
+diff --git a/static/css/canvas.css b/static/css/canvas.css
+index 6a8164a..b712384 100644
+--- a/static/css/canvas.css
++++ b/static/css/canvas.css
+@@ -324,6 +324,8 @@ body.canvas-selecting .node .llm-bubble { pointer-events:none !important; }
+ .node.sized.image-node img { flex:1; min-height:0; height:100%; max-height:none; }
+ .node.sized.image-node video { width:100%; height:100%; object-fit:contain; }
+ .image-caption { flex:0 0 auto; }
++.image-caption-row { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
++.image-caption-row .image-caption { flex:1 1 auto; min-width:0; }
+ .blank-image { height:190px; border:1px dashed #cbd5e1; border-radius:16px; background:#f8fafc; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#94a3b8; cursor:pointer; transition:all .2s var(--ease); }
+ .node.sized .blank-image { height:100%; min-height:72px; }
+ .blank-image:hover,.blank-image.drag-over { border-color:#111827; color:#111827; background:#fff; }
+diff --git a/static/js/canvas.js b/static/js/canvas.js
+index 4643232..d3d86b0 100644
+--- a/static/js/canvas.js
++++ b/static/js/canvas.js
+@@ -6074,11 +6074,12 @@ function renderNode(node){
+     const body = document.createElement('div');
+     body.className = 'node-body';
+     if(node.type === 'image') {
++        const libraryBtnHtml = `<button class="prompt-template-btn" type="button" data-image-library-open data-image-library-node-id="${escapeAttr(node.id)}" title="从素材库选择图片"><i data-lucide="library"></i><span>素材库</span></button>`;
+         if(node.url) {
+             const missing = isMissingAssetUrl(node.url);
+             const mediaKind = mediaKindForNode(node);
+             const isEditableImage = mediaKind === 'image' && !missing;
+-            body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"')}</div><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</div>`;
++            body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"')}</div><div class="image-caption-row"><span class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</span>${libraryBtnHtml}</div>`;
+             if(!missing && mediaKind !== 'image'){
+                 const mediaHtml = mediaKind === 'video'
+                     ? `<div class="media-card video-card">${canvasVideoPreviewHtml(node.url, 768, 'draggable="false" data-video-fallback-attrs="controls"')}<button class="canvas-video-play" type="button" title="播放"><i data-lucide="play"></i></button></div>`
+@@ -6148,15 +6149,32 @@ function renderNode(node){
+                 }, true);
+             }
+             body.addEventListener('dblclick', openPreview, true);
++            const imageLibBtn = body.querySelector('[data-image-library-open]');
++            if(imageLibBtn) {
++                imageLibBtn.onclick = e => {
++                    e.preventDefault();
++                    e.stopPropagation();
++                    openImageAssetPicker(node.id);
++                };
++            }
+             if(loadedImg && loadedImg.complete && loadedImg.naturalHeight > 0){
+                 requestAnimationFrame(refreshGeometry);
+             } else if(loadedImg) {
+                 loadedImg.onload = () => refreshGeometryAfterLayout();
+             }
+         } else {
+-        body.innerHTML = `<div class="blank-image"><i data-lucide="image-plus" class="w-7 h-7"></i><div class="text-[11px] font-bold">${tr('canvas.clickDragPasteImage')}</div></div>`;
++        const blankLibraryBtnHtml = `<button class="prompt-template-btn" type="button" data-blank-image-library-open data-blank-image-library-node-id="${escapeAttr(node.id)}" title="从素材库选择图片"><i data-lucide="library"></i><span>素材库</span></button>`;
++        body.innerHTML = `<div class="blank-image"><i data-lucide="image-plus" class="w-7 h-7"></i><div class="text-[11px] font-bold">${tr('canvas.clickDragPasteImage')}</div><div style="margin-top:6px">${blankLibraryBtnHtml}</div></div>`;
+             const blank = body.querySelector('.blank-image');
+             blank.onclick = () => openImageAssetPicker(node.id);
++            const blankLibBtn = body.querySelector('[data-blank-image-library-open]');
++            if(blankLibBtn) {
++                blankLibBtn.onclick = e => {
++                    e.preventDefault();
++                    e.stopPropagation();
++                    openImageAssetPicker(node.id);
++                };
++            }
+             blank.ondragover = e => allowImageNodeDropEvent(e, blank);
+             blank.ondragleave = e => { e.stopPropagation(); blank.classList.remove('drag-over'); };
+             blank.ondrop = e => handleImageNodeDropEvent(e, node.id, blank);
+diff --git a/tests/test_image_node_library_button.mjs b/tests/test_image_node_library_button.mjs
+new file mode 100644
+index 0000000..343f2bc
+--- /dev/null
++++ b/tests/test_image_node_library_button.mjs
+@@ -0,0 +1,56 @@
++// Regression test for Images-node 素材库 button (T11b).
++// Verifies canvas.js wires a "素材库" button on every image node (with or
++// without url) and routes clicks to openImageAssetPicker (Plan 2 picker modal).
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import path from 'node:path';
++import url from 'node:url';
++
++const here = path.dirname(url.fileURLToPath(import.meta.url));
++const canvasJsPath = path.join(here, '..', 'static', 'js', 'canvas.js');
++const source = fs.readFileSync(canvasJsPath, 'utf8');
++
++test('image node with url renders a 素材库 button (data-image-library-open)', () => {
++  assert.match(source, /data-image-library-open[\s\S]*?data-image-library-node-id/);
++  assert.match(source, /[\u6750\u6599\u5e93]/); // 素材库 Chinese label
++});
++
++test('blank image node renders a 素材库 button (data-blank-image-library-open)', () => {
++  assert.match(source, /data-blank-image-library-open[\s\S]*?data-blank-image-library-node-id/);
++});
++
++test('image node 素材库 button click handler calls openImageAssetPicker', () => {
++  // Locate the image-library-open handler block
++  const start = source.search(/const\s+imageLibBtn\s*=\s*body\.querySelector\(\s*'\[data-image-library-open\]'\s*\)/);
++  assert.notEqual(start, -1, 'image-library-open handler not found');
++  let depth = 0;
++  let i = source.indexOf('{', start);
++  let end = i;
++  for(; i < source.length; i++){
++    if(source[i] === '{') depth++;
++    else if(source[i] === '}') { depth--; if(depth === 0){ end = i; break; } }
++  }
++  const block = source.slice(start, end + 1);
++  assert.match(block, /openImageAssetPicker\s*\(\s*node\.id\s*\)/);
++});
++
++test('blank image node 素材库 button click handler calls openImageAssetPicker', () => {
++  const start = source.search(/const\s+blankLibBtn\s*=\s*body\.querySelector\(\s*'\[data-blank-image-library-open\]'\s*\)/);
++  assert.notEqual(start, -1, 'blank-image-library-open handler not found');
++  let depth = 0;
++  let i = source.indexOf('{', start);
++  let end = i;
++  for(; i < source.length; i++){
++    if(source[i] === '{') depth++;
++    else if(source[i] === '}') { depth--; if(depth === 0){ end = i; break; } }
++  }
++  const block = source.slice(start, end + 1);
++  assert.match(block, /openImageAssetPicker\s*\(\s*node\.id\s*\)/);
++});
++
++test('canvas.css has .image-caption-row layout rule', () => {
++  const cssPath = path.join(here, '..', 'static', 'css', 'canvas.css');
++  const css = fs.readFileSync(cssPath, 'utf8');
++  assert.match(css, /\.image-caption-row\s*\{[^}]*display\s*:\s*flex/);
++});
+\ No newline at end of file
+-- 
+2.50.1 (Apple Git-155)
+
+
+From c1e38d803e4b81acf55a5f7890102bad93fdf8eb Mon Sep 17 00:00:00 2001
+From: maoshutalk <maoshutalk@gmail.com>
+Date: Sat, 18 Jul 2026 21:22:05 +1000
+Subject: [PATCH 2/2] fix(canvas-picker): load local assets from
+ /api/asset-library
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Plan 2 picker called GET /api/asset-library/items?limit=200, but only
+POST /api/asset-library/items exists in main.py — local items were
+always empty. Switch to GET /api/asset-library (returns the full library
+document) and flatten libraries[].categories[].items[] (filtering
+image-type categories) into the picker grid.
+
+Verified end-to-end via agent-browser against http://192.168.50.150:3008:
+- "素材库" button on a blank image node opens picker
+- Picker shows both real assets (角色 / 场景) with thumbnails
+- Clicking a thumb mutates the node url + name and closes the modal
+
+Co-Authored-By: claude-sonnet-4-6 <noreply@anthropic.com>
+---
+ static/js/canvas-image-picker.js | 21 +++++++++++++++++++--
+ 1 file changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/static/js/canvas-image-picker.js b/static/js/canvas-image-picker.js
+index 7887750..a84231b 100644
+--- a/static/js/canvas-image-picker.js
++++ b/static/js/canvas-image-picker.js
+@@ -26,9 +26,26 @@
+         state.loading = true;
+         try {
+             if (state.scope === 'local') {
+-                const r = await fetch('/api/asset-library/items?limit=200', { credentials: 'same-origin' });
++                const r = await fetch('/api/asset-library', { credentials: 'same-origin' });
+                 const data = await r.json();
+-                state.items = (data.items || []);
++                const lib = data && data.library ? data.library : data;
++                const allItems = [];
++                const libs = (lib && lib.libraries) || [];
++                libs.forEach(l => {
++                    (l.categories || []).forEach(cat => {
++                        if(cat.type && cat.type !== 'image') return;
++                        (cat.items || []).forEach(item => {
++                            if(!item.url) return;
++                            allItems.push({
++                                id: item.id,
++                                url: item.url,
++                                name: item.name || '',
++                                kind: item.kind || 'image',
++                            });
++                        });
++                    });
++                });
++                state.items = allItems;
+             } else if (state.scope.startsWith('vi:')) {
+                 const sourceId = state.scope.slice(3);
+                 const params = new URLSearchParams();
+-- 
+2.50.1 (Apple Git-155)
+
