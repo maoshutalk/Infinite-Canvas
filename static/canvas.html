@@ -352,5 +352,17 @@
 
     <script src="/static/js/ltx-director-timeline.js?v=2026.07.15.1784241892"></script>
     <script src="/static/js/canvas.js?v=2026.07.15.1784241892"></script>
+    <!-- Video Index plugin: image-node asset picker -->
+    <div id="imageAssetPickerModal" class="hidden" role="dialog" aria-label="Image picker">
+        <div class="image-picker-panel">
+            <div class="image-picker-toolbar">
+                <input id="imageAssetPickerSearch" type="search" placeholder="搜索素材" aria-label="搜索素材">
+                <button id="imageAssetPickerUpload" type="button">本地上传</button>
+                <button id="imageAssetPickerClose" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="image-picker-grid"></div>
+        </div>
+    </div>
+    <script src="/static/js/canvas-image-picker.js" defer></script>
 </body>
 </html>
