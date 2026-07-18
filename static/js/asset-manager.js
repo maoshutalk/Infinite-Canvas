@@ -399,8 +399,9 @@ function renderStorageSettingsModal(){
             <div class="asset-pref-tabs">
                 <button class="${activePrefTab === 'prefs' ? 'active' : ''}" type="button" data-pref-tab="prefs"><i data-lucide="sliders-horizontal"></i><span>偏好设置</span></button>
                 <button class="${activePrefTab === 'manage' ? 'active' : ''}" type="button" data-pref-tab="manage"><i data-lucide="images"></i><span>素材管理</span></button>
+                <button class="${activePrefTab === 'video_index' ? 'active' : ''}" type="button" data-pref-tab="video_index"><i data-lucide="satellite"></i><span>Video Index</span></button>
             </div>
-            <div class="asset-pref-body">${activePrefTab === 'manage' ? manageBody : prefsBody}</div>
+            <div class="asset-pref-body">${activePrefTab === 'manage' ? manageBody : activePrefTab === 'video_index' ? renderVideoIndexBody() : prefsBody}</div>
         </div>
     `;
     const fileGrid = overlay.querySelector('[data-storage-file-grid]');
@@ -410,6 +411,86 @@ function renderStorageSettingsModal(){
         storageSettingsState.restoreScrollTop = null;
     }
     refreshIcons();
+    if(activePrefTab === 'video_index'){
+        bindVideoIndexEvents(overlay);
+        loadVideoIndexSettings(overlay);
+    }
+}
+function renderVideoIndexBody(){
+    return `
+        <div class="asset-pref-section">
+            <div class="asset-pref-title"><i data-lucide="satellite"></i><span>Video Index 插件</span></div>
+            <label class="storage-dir-row">
+                <span>启用插件</span>
+                <input type="checkbox" id="viEnabled">
+            </label>
+            <label class="storage-dir-row">
+                <span>VI Base URL</span>
+                <input type="text" id="viBaseUrl" placeholder="http://127.0.0.1:8000">
+            </label>
+            <div class="asset-pref-grid">
+                <label class="storage-dir-row">
+                    <span>超时 (秒)</span>
+                    <input type="number" id="viTimeout" min="1" max="600">
+                </label>
+                <label class="storage-dir-row">
+                    <span>缓存 TTL (秒)</span>
+                    <input type="number" id="viCacheTtl" min="0" max="3600">
+                </label>
+            </div>
+            <div class="storage-settings-actions inline">
+                <button class="asset-btn" type="button" id="viTestConn"><i data-lucide="activity"></i><span>测试连接</span></button>
+                <button class="asset-btn primary" type="button" id="viSave"><i data-lucide="save"></i><span>保存</span></button>
+            </div>
+            <div id="viStatus" class="asset-pref-status"></div>
+        </div>
+    `;
+}
+async function loadVideoIndexSettings(overlayEl){
+    try {
+        const data = await apiJson('/api/vi/settings');
+        const enabled = overlayEl.querySelector('#viEnabled');
+        const baseUrl = overlayEl.querySelector('#viBaseUrl');
+        const timeout = overlayEl.querySelector('#viTimeout');
+        const cacheTtl = overlayEl.querySelector('#viCacheTtl');
+        if(enabled) enabled.checked = !!data.enabled;
+        if(baseUrl) baseUrl.value = data.base_url || '';
+        if(timeout) timeout.value = data.timeout_s ?? 30;
+        if(cacheTtl) cacheTtl.value = data.cache_ttl_s ?? 60;
+    } catch(err){
+        setStatus(err.message || '读取 Video Index 设置失败');
+    }
+}
+function bindVideoIndexEvents(overlayEl){
+    const saveBtn = overlayEl.querySelector('#viSave');
+    const testBtn = overlayEl.querySelector('#viTestConn');
+    saveBtn?.addEventListener('click', async () => {
+        const payload = {
+            enabled: !!overlayEl.querySelector('#viEnabled')?.checked,
+            base_url: overlayEl.querySelector('#viBaseUrl')?.value || '',
+            timeout_s: parseInt(overlayEl.querySelector('#viTimeout')?.value, 10) || 30,
+            cache_ttl_s: parseInt(overlayEl.querySelector('#viCacheTtl')?.value, 10) || 60,
+        };
+        try {
+            const data = await apiJson('/api/vi/settings', {
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify(payload)
+            });
+            setStatus(`Video Index 设置已保存 (enabled=${data.enabled})`);
+        } catch(err){
+            setStatus(err.message || '保存 Video Index 设置失败');
+        }
+    });
+    testBtn?.addEventListener('click', async () => {
+        const statusEl = overlayEl.querySelector('#viStatus');
+        try {
+            const data = await apiJson('/api/vi/health');
+            if(statusEl) statusEl.textContent = data.ok ? 'VI reachable' : `VI unreachable: ${JSON.stringify(data.detail || data)}`;
+        } catch(err){
+            if(statusEl) statusEl.textContent = `VI unreachable: ${err.message || err}`;
+        }
+    });
 }
 async function deleteSelectedStorageFiles(){
     const selected = storageSettingsState.items.filter(item => storageSettingsState.selected.has(item.id));
