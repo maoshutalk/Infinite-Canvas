@@ -36,6 +36,8 @@ def register(app, settings, library_path: Optional[Path] = None):
     from . import router_json as _rj, router_media as _rm
     app.include_router(_rj.router)
     app.include_router(_rm.router)
+    from . import router_settings as _rs
+    app.include_router(_rs.router)
     if library_path is not None:
         from .sync import sync_vi_libraries
         # sync_vi_libraries is async; register() is sync, so run it inline.

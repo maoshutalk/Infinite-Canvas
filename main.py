@@ -17701,6 +17701,7 @@ def run_workflow(name: str, payload: WorkflowRunRequest):
 try:
     from pathlib import Path as _Path
 
+    os.environ.setdefault("INFINITE_CANVAS_DATA_DIR", DATA_DIR)
     _settings_path = _Path(DATA_DIR) / "storage_settings.json"
     _settings_data = json.loads(_settings_path.read_text("utf-8")) if _settings_path.exists() else {}
     _lib_path = _Path(DATA_DIR) / "asset_library.json"
