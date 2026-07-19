@@ -6166,7 +6166,10 @@ function renderNode(node){
         const blankLibraryBtnHtml = `<button class="prompt-template-btn" type="button" data-blank-image-library-open data-blank-image-library-node-id="${escapeAttr(node.id)}" title="从素材库选择图片"><i data-lucide="library"></i><span>素材库</span></button>`;
         body.innerHTML = `<div class="blank-image"><i data-lucide="image-plus" class="w-7 h-7"></i><div class="text-[11px] font-bold">${tr('canvas.clickDragPasteImage')}</div><div style="margin-top:6px">${blankLibraryBtnHtml}</div></div>`;
             const blank = body.querySelector('.blank-image');
-            blank.onclick = () => openImageAssetPicker(node.id);
+            blank.onclick = e => {
+                if(e.target.closest('[data-blank-image-library-open]')) return;
+                pickImageForNode(node.id);
+            };
             const blankLibBtn = body.querySelector('[data-blank-image-library-open]');
             if(blankLibBtn) {
                 blankLibBtn.onclick = e => {
