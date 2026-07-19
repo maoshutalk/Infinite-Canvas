@@ -7,10 +7,20 @@ import assert from 'node:assert/strict';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(join(__dirname, '..', 'static', 'js', 'canvas.js'), 'utf8');
 
-test('blank.onclick routes to openImageAssetPicker', () => {
-    const re = /blank\.onclick\s*=\s*\(\)\s*=>\s*openImageAssetPicker\(/;
+test('blank.onclick routes to pickImageForNode (file upload), NOT asset picker', () => {
+    // Clicking the empty area of a blank image node triggers the OS file
+    // picker (pickImageForNode), so existing upload behavior is preserved.
+    // Only the explicit 素材库 button opens the asset library picker.
+    const blankClickRe = /blank\.onclick\s*=\s*e\s*=>\s*\{[\s\S]*?pickImageForNode\s*\(\s*node\.id\s*\)\s*;/;
+    assert.ok(blankClickRe.test(SRC),
+        'expected blank.onclick handler that calls pickImageForNode(node.id); when the 素材库 button is not the click target');
+});
+
+test('blank image 素材库 button still routes to openImageAssetPicker', () => {
+    // The 素材库 button must still open the asset library picker.
+    const re = /blankLibBtn\.onclick\s*=\s*e\s*=>\s*\{[\s\S]*?openImageAssetPicker\s*\(\s*node\.id\s*\)\s*;/;
     assert.ok(re.test(SRC),
-        'expected `blank.onclick = () => openImageAssetPicker(...)` in canvas.js');
+        'expected blankLibBtn.onclick handler that calls openImageAssetPicker(node.id);');
 });
 
 test('legacy pickImageForNode still exists (used by picker upload button)', () => {
